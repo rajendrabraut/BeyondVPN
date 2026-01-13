@@ -10,10 +10,8 @@ logger.Info($"Starting Linux server agent. Relay: {relayUri}");
 using var socket = new ClientWebSocket();
 try
 {
-    // Reverse-connect to the public relay (works behind CGNAT).
     await socket.ConnectAsync(new Uri(relayUri), CancellationToken.None);
     logger.Info("Connected to relay (stub).");
-    // Placeholder control message (handshake/data plane comes next).
     var payload = Encoding.UTF8.GetBytes("SERVER_HELLO");
     await socket.SendAsync(payload, WebSocketMessageType.Text, true, CancellationToken.None);
 }

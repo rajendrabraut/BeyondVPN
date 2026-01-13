@@ -33,7 +33,6 @@ namespace VpnCore.Protocol
             return buffer;
         }
 
-        // Expects the caller to supply a full frame (length already checked).
         public static Frame FromBytes(byte[] buffer)
         {
             if (buffer.Length < 5)

@@ -7,8 +7,7 @@ namespace VpnApp.WinForms
     {
         public void ApplyPolicy(VpnPolicy policy)
         {
-            // Lightweight fallback using netsh firewall rules.
-            // Prefer WFP in a full implementation for per-interface rules.
+
             foreach (var cidr in policy.AllowedCidrs)
             {
                 var ruleName = $"BeyondVPN-Allow-{cidr}";
