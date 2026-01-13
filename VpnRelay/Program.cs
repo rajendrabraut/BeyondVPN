@@ -12,6 +12,7 @@ var sessions = new ConcurrentDictionary<string, RelaySession>();
 
 app.Map("/relay", async context =>
 {
+    // The relay is a blind forwarder. It does not decrypt payloads.
     if (!context.WebSockets.IsWebSocketRequest)
     {
         context.Response.StatusCode = 400;
@@ -51,6 +52,7 @@ sealed class RelaySession
 
     public async Task TryBridgeAsync(FileLogger logger, string sessionId)
     {
+        // Only bridge when both sides are connected.
         if (Server == null || Client == null)
         {
             return;

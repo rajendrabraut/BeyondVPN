@@ -7,6 +7,7 @@ namespace VpnCore.Protocol
         public MessageType Type { get; }
         public byte[] Payload { get; }
 
+        // Frame format: [length:4][type:1][payload:N]
         public Frame(MessageType type, byte[] payload)
         {
             Type = type;

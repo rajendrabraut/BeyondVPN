@@ -17,6 +17,7 @@ namespace VpnCore.Users
             _path = path;
         }
 
+        // Loads and decrypts the user database from disk.
         public UserDatabase Load(string masterPassword)
         {
             if (!File.Exists(_path))
@@ -29,6 +30,7 @@ namespace VpnCore.Users
             return JsonSerializer.Deserialize<UserDatabase>(payload) ?? new UserDatabase();
         }
 
+        // Encrypts and saves the user database to disk.
         public void Save(UserDatabase database, string masterPassword)
         {
             var payload = JsonSerializer.Serialize(database, new JsonSerializerOptions
@@ -47,6 +49,7 @@ namespace VpnCore.Users
                 throw new InvalidOperationException("User already exists.");
             }
 
+            // Password hashing uses PBKDF2 (SHA-256) for compatibility with net48.
             var salt = RandomBytes(16);
             var hash = HashPassword(password, salt, database.Iterations);
             var record = new UserRecord
@@ -68,6 +71,7 @@ namespace VpnCore.Users
                 return false;
             }
 
+            // Constant-time compare to mitigate timing attacks.
             var salt = Convert.FromBase64String(user.Salt);
             var hash = HashPassword(password, salt, database.Iterations);
             var expected = Convert.FromBase64String(user.PasswordHash);

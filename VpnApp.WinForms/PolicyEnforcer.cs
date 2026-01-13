@@ -7,6 +7,7 @@ namespace VpnApp.WinForms
     {
         public void ApplyPolicy(VpnPolicy policy)
         {
+
             foreach (var cidr in policy.AllowedCidrs)
             {
                 var ruleName = $"BeyondVPN-Allow-{cidr}";

@@ -15,6 +15,7 @@ public sealed class LinuxTunDevice : ITunDevice
     private readonly SafeFileHandle _handle;
     private readonly FileStream _stream;
 
+    // Creates /dev/net/tun interface with no packet info (IFF_NO_PI).
     public LinuxTunDevice(string name)
     {
         Name = name;

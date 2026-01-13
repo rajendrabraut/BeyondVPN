@@ -16,6 +16,7 @@ namespace VpnCore.Transport
             _socket = socket;
         }
 
+        // Sends a binary frame over WSS.
         public async Task SendFrameAsync(Frame frame, CancellationToken cancellationToken)
         {
             var bytes = frame.ToBytes();
@@ -23,6 +24,7 @@ namespace VpnCore.Transport
                 .ConfigureAwait(false);
         }
 
+        // Receives a full frame and validates the length prefix.
         public async Task<Frame?> ReceiveFrameAsync(CancellationToken cancellationToken)
         {
             var buffer = new byte[64 * 1024];

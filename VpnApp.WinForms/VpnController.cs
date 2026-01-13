@@ -9,6 +9,7 @@ namespace VpnApp.WinForms
         private readonly FileLogger _clientLogger;
         private readonly FileLogger _serverLogger;
 
+
         public VpnController()
         {
             var logDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
@@ -18,6 +19,7 @@ namespace VpnApp.WinForms
 
         public void StartClient(string endpoint)
         {
+
             _clientLogger.Info($"Starting client to {endpoint}.");
         }
 

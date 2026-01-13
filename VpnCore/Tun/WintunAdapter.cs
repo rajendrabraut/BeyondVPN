@@ -11,6 +11,7 @@ namespace VpnCore.Tun
         private IntPtr _adapterHandle;
         private IntPtr _sessionHandle;
 
+        // Uses Wintun (WireGuard's TUN driver) for a real Layer-3 interface on Windows.
         public WintunAdapter(string name)
         {
             _name = name;
@@ -24,6 +25,7 @@ namespace VpnCore.Tun
 
         public string Name => _name;
 
+        // Reads a raw IP packet from the TUN interface.
         public Task<int> ReadAsync(byte[] buffer, CancellationToken cancellationToken)
         {
             return Task.Run(() =>
@@ -49,6 +51,7 @@ namespace VpnCore.Tun
                 {
                     throw new InvalidOperationException("Failed to allocate send packet.");
                 }
+                // Copy raw IP packet into the adapter buffer.
                 Marshal.Copy(buffer, 0, packet, length);
                 WintunSendPacket(_sessionHandle, packet);
             }, cancellationToken);
