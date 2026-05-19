@@ -6,23 +6,6 @@ declare global {
     vpn?: {
       connect: (serverId: string) => Promise<{ ok: boolean; error?: string; protocol?: string }>;
       disconnect: (serverId: string) => Promise<{ ok: boolean; error?: string }>;
-      status: () => Promise<{
-        publicNetwork: {
-          ip: string;
-          city: string;
-          region: string;
-          country: string;
-          org: string;
-        };
-      dnsServers: string[];
-      activeTunnels: string[];
-      tunnelCount: number;
-      tunnelMode: string;
-      capabilities: {
-        openVpnInstalled: boolean;
-        wireGuardInstalled: boolean;
-      };
-      }>;
     };
   }
 }
@@ -56,6 +39,20 @@ type Provider = {
   note: string;
 };
 
+type AuthResponse = {
+  token: string;
+  user: User;
+};
+
+type CountryRow = {
+  country: string;
+  total: number;
+  up: number;
+  down: number;
+  avgLatency: number;
+  fastest: Server;
+};
+
 type VpnSource = {
   id: string;
   name: string;
@@ -68,78 +65,155 @@ type VpnSource = {
   url?: string;
 };
 
-type NetworkTelemetry = {
-  publicNetwork: {
-    ip: string;
-    city: string;
-    region: string;
-    country: string;
-    org: string;
-  };
-  dnsServers: string[];
-  activeTunnels: string[];
-  tunnelCount: number;
-  tunnelMode: string;
-  capabilities: {
-    openVpnInstalled: boolean;
-    wireGuardInstalled: boolean;
-  };
+type VpnSourceKind = 'ovpn-file' | 'wireguard-config' | 'free-internet';
+
+type AvailabilitySample = {
+  time: string;
+  up: number;
+  down: number;
+};
+
+type Notice = {
+  id: number;
+  text: string;
+  tone: 'info' | 'success' | 'danger';
 };
 
 const API = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000/api';
 const http = axios.create({ baseURL: API });
+const REMEMBER_KEY = 'beyondvpn-remembered-session';
+const MAX_HISTORY_POINTS = 18;
 
-const DEFAULT_FORM = {
+const DEFAULT_LOGIN = {
   username: 'demo',
   password: 'demo',
+};
+
+const DEFAULT_REGISTRATION = {
+  username: '',
   email: '',
-  displayName: '',
+  mobileNumber: '',
+  firstName: '',
+  middleName: '',
+  lastName: '',
+  gender: '',
+  password: '',
+  confirmPassword: '',
 };
 
 const DEFAULT_SOURCE_FORM: VpnSource = {
   id: '',
   name: '',
-  country: 'Custom',
-  protocol: 'wireguard',
-  latencyMs: 40,
+  country: '',
+  protocol: 'openvpn',
+  latencyMs: 80,
   source: 'Admin',
   isFree: true,
   path: '',
   url: '',
 };
 
+function BeyondLogo() {
+  return (
+    <div className="brand-lockup" aria-label="BeyondVPN">
+      <div className="brand-mark">
+        <span>B</span>
+      </div>
+      <strong>BeyondVPN</strong>
+    </div>
+  );
+}
+
+function makeOtp() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function getInitialRoute() {
+  return window.location.pathname === '/register' ? 'register' : 'login';
+}
+
 export default function App() {
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [route, setRoute] = useState<'login' | 'register'>(getInitialRoute);
   const [token, setToken] = useState('');
   const [providers, setProviders] = useState<Provider[]>([]);
   const [backendHealthy, setBackendHealthy] = useState(false);
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [form, setForm] = useState(DEFAULT_FORM);
-  const [message, setMessage] = useState('Bring the control plane online.');
+  const [loginForm, setLoginForm] = useState(DEFAULT_LOGIN);
+  const [registerForm, setRegisterForm] = useState(DEFAULT_REGISTRATION);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [pendingAuth, setPendingAuth] = useState<AuthResponse | null>(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpInput, setOtpInput] = useState('');
+  const [message, setMessage] = useState('Sign in to choose a VPN location.');
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [servers, setServers] = useState<Server[]>([]);
+  const [vpnSources, setVpnSources] = useState<VpnSource[]>([]);
+  const [sourceKind, setSourceKind] = useState<VpnSourceKind>('ovpn-file');
+  const [sourceForm, setSourceForm] = useState<VpnSource>(DEFAULT_SOURCE_FORM);
+  const [sourceBusy, setSourceBusy] = useState(false);
   const [selected, setSelected] = useState<Server | null>(null);
-  const [status, setStatus] = useState('Idle');
-  const [search, setSearch] = useState('');
-  const [protocolFilter, setProtocolFilter] = useState<'all' | 'openvpn' | 'wireguard'>('all');
+  const [status, setStatus] = useState('Not connected');
+  const [countrySearch, setCountrySearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [busyServerId, setBusyServerId] = useState('');
   const [reloadingData, setReloadingData] = useState(false);
-  const [networkTelemetry, setNetworkTelemetry] = useState<NetworkTelemetry | null>(null);
-  const [baselineTelemetry, setBaselineTelemetry] = useState<NetworkTelemetry | null>(null);
-  const [vpnSources, setVpnSources] = useState<VpnSource[]>([]);
-  const [sourceForm, setSourceForm] = useState<VpnSource>(DEFAULT_SOURCE_FORM);
-  const [sourceBusy, setSourceBusy] = useState(false);
+  const [availabilityHistory, setAvailabilityHistory] = useState<AvailabilitySample[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'Admin' | 'User'>('all');
 
   const authHeaders = useMemo(
     () => (token ? { Authorization: `Bearer ${token}` } : undefined),
     [token]
   );
 
-  const isDesktopTunnelMode = Boolean(window.vpn);
-  const isConnected = status.toLowerCase().startsWith('connected');
-  const canConnect = Boolean(selected) && !busyServerId;
-  const canDisconnect = Boolean(selected) && !busyServerId && isDesktopTunnelMode && isConnected;
+  useEffect(() => {
+    const handlePopState = () => setRoute(getInitialRoute());
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    const tone = /failed|offline|invalid|unable|error|not available/i.test(message)
+      ? 'danger'
+      : /verified|completed|restored|updated|saved|connected|disconnected|signed out/i.test(message)
+        ? 'success'
+        : 'info';
+    const nextNotice = { id: Date.now(), text: message, tone } satisfies Notice;
+    setNotice(nextNotice);
+    const timeout = window.setTimeout(() => {
+      setNotice((current) => (current?.id === nextNotice.id ? null : current));
+    }, 5200);
+
+    return () => window.clearTimeout(timeout);
+  }, [message]);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('beyondvpn-theme');
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      setTheme(savedTheme);
+    }
+
+    const savedSession = localStorage.getItem(REMEMBER_KEY);
+    if (savedSession) {
+      try {
+        const parsed = JSON.parse(savedSession) as AuthResponse;
+        if (parsed.token && parsed.user) {
+          setToken(parsed.token);
+          setUser(parsed.user);
+          setMessage('Remembered session restored.');
+        }
+      } catch {
+        localStorage.removeItem(REMEMBER_KEY);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('beyondvpn-theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     const boot = async () => {
@@ -162,53 +236,6 @@ export default function App() {
     boot();
   }, []);
 
-  useEffect(() => {
-    if (!window.vpn?.status) {
-      setNetworkTelemetry(null);
-      return;
-    }
-
-    let alive = true;
-
-    const refreshTelemetry = async () => {
-      try {
-        const nextTelemetry = await window.vpn.status();
-        if (alive) {
-          setNetworkTelemetry(nextTelemetry);
-          if (!baselineTelemetry && nextTelemetry.tunnelCount === 0) {
-            setBaselineTelemetry(nextTelemetry);
-          }
-        }
-      } catch {
-        if (alive) {
-          setNetworkTelemetry(null);
-        }
-      }
-    };
-
-    refreshTelemetry();
-    const interval = window.setInterval(refreshTelemetry, 15000);
-
-    return () => {
-      alive = false;
-      window.clearInterval(interval);
-    };
-  }, [token, status, baselineTelemetry]);
-
-  const ipChanged = Boolean(
-    networkTelemetry &&
-    baselineTelemetry &&
-    networkTelemetry.publicNetwork.ip !== 'Unknown' &&
-    baselineTelemetry.publicNetwork.ip !== 'Unknown' &&
-    networkTelemetry.publicNetwork.ip !== baselineTelemetry.publicNetwork.ip
-  );
-
-  const dnsChanged = Boolean(
-    networkTelemetry &&
-    baselineTelemetry &&
-    JSON.stringify(networkTelemetry.dnsServers) !== JSON.stringify(baselineTelemetry.dnsServers)
-  );
-
   const loadDashboard = async (showReloadState = false) => {
     if (!token) {
       return;
@@ -224,19 +251,13 @@ export default function App() {
         http.get('/servers'),
       ]);
 
+      const nextUser = meResponse.data as User;
       const nextServers = serversResponse.data as Server[];
-      setUser(meResponse.data);
+      setUser(nextUser);
       setServers(nextServers);
-      setSelected((current) => {
-        if (current) {
-          return nextServers.find((entry) => entry.id === current.id) ?? nextServers[0] ?? null;
-        }
+      setSelected((current) => current ? nextServers.find((entry) => entry.id === current.id) ?? nextServers[0] ?? null : nextServers[0] ?? null);
 
-        return nextServers[0] ?? null;
-      });
-      setMessage('User session synchronized with backend.');
-
-      if (meResponse.data.role === 'Admin') {
+      if (nextUser.role === 'Admin') {
         const [usersResponse, sourcesResponse] = await Promise.all([
           http.get('/users', { headers: authHeaders }),
           http.get('/vpn/sources', { headers: authHeaders }),
@@ -255,51 +276,187 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (token) {
+      loadDashboard();
+    }
+  }, [token, authHeaders]);
+
+  useEffect(() => {
     if (!token) {
       return;
     }
 
-    loadDashboard();
+    const interval = window.setInterval(() => {
+      loadDashboard();
+    }, 15000);
+
+    return () => window.clearInterval(interval);
   }, [token, authHeaders]);
 
-  const filteredServers = servers.filter((server) => {
-    const q = search.toLowerCase();
-    const protocolMatch = protocolFilter === 'all' || server.type === protocolFilter;
-    const searchMatch =
-      server.name.toLowerCase().includes(q) ||
-      server.country.toLowerCase().includes(q) ||
-      server.type.toLowerCase().includes(q);
+  const countryRows = useMemo<CountryRow[]>(() => {
+    const grouped = new Map<string, Server[]>();
+    servers.forEach((server) => {
+      grouped.set(server.country, [...(grouped.get(server.country) ?? []), server]);
+    });
 
-    return protocolMatch && searchMatch;
+    return [...grouped.entries()]
+      .map(([country, items]) => {
+        const sorted = [...items].sort((a, b) => a.latencyMs - b.latencyMs);
+        const up = items.filter((server) => server.latencyMs < 800).length;
+        const totalLatency = items.reduce((sum, server) => sum + server.latencyMs, 0);
+
+        return {
+          country,
+          total: items.length,
+          up,
+          down: items.length - up,
+          avgLatency: Math.round(totalLatency / items.length),
+          fastest: sorted[0],
+        };
+      })
+      .sort((a, b) => a.avgLatency - b.avgLatency);
+  }, [servers]);
+
+  const visibleCountries = countryRows.filter((entry) =>
+    entry.country.toLowerCase().includes(countrySearch.trim().toLowerCase())
+  );
+
+  const availabilityTotals = useMemo(
+    () => ({
+      up: countryRows.reduce((sum, entry) => sum + entry.up, 0),
+      down: countryRows.reduce((sum, entry) => sum + entry.down, 0),
+    }),
+    [countryRows]
+  );
+  const lineChartMax = Math.max(1, ...availabilityHistory.flatMap((entry) => [entry.up, entry.down]));
+  const getLinePath = (key: 'up' | 'down') =>
+    availabilityHistory
+      .map((entry, index) => {
+        const x = availabilityHistory.length <= 1 ? 0 : (index / (availabilityHistory.length - 1)) * 640;
+        const y = 210 - (entry[key] / lineChartMax) * 170;
+        return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+      })
+      .join(' ');
+  const isConnected = status.toLowerCase().startsWith('connected');
+  const canConnect = Boolean(selected) && !busyServerId;
+  const canDisconnect = Boolean(selected) && !busyServerId && Boolean(window.vpn) && isConnected;
+
+  useEffect(() => {
+    if (!token) {
+      setAvailabilityHistory([]);
+      return;
+    }
+
+    const addSample = () => {
+      const nextSample = {
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        up: availabilityTotals.up,
+        down: availabilityTotals.down,
+      };
+      setAvailabilityHistory((current) => [...current.slice(-(MAX_HISTORY_POINTS - 1)), nextSample]);
+    };
+
+    addSample();
+    const interval = window.setInterval(addSample, 5000);
+    return () => window.clearInterval(interval);
+  }, [token, availabilityTotals.up, availabilityTotals.down]);
+
+  const filteredUsers = users.filter((entry) => {
+    const query = userSearch.trim().toLowerCase();
+    const roleMatches = roleFilter === 'all' || entry.role === roleFilter;
+    const textMatches =
+      !query ||
+      entry.username.toLowerCase().includes(query) ||
+      entry.displayName.toLowerCase().includes(query) ||
+      entry.email.toLowerCase().includes(query);
+
+    return roleMatches && textMatches;
   });
 
-  const handleSubmit = async (event: FormEvent) => {
+  const completeLogin = (auth: AuthResponse) => {
+    setToken(auth.token);
+    setUser(auth.user);
+    setPendingAuth(null);
+    setOtpCode('');
+    setOtpInput('');
+    setStatus('Not connected');
+    setMessage('Login verified. Choose a country and press Connect.');
+
+    if (rememberMe) {
+      localStorage.setItem(REMEMBER_KEY, JSON.stringify(auth));
+    } else {
+      localStorage.removeItem(REMEMBER_KEY);
+    }
+  };
+
+  const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
-    setMessage(mode === 'register' ? 'Creating user record...' : 'Authenticating session...');
+    setMessage('Checking username and password...');
 
     try {
-      const endpoint = mode === 'register' ? '/register' : '/auth';
-      const payload =
-        mode === 'register'
-          ? {
-              username: form.username,
-              password: form.password,
-              email: form.email,
-              displayName: form.displayName,
-            }
-          : {
-              username: form.username,
-              password: form.password,
-            };
-
-      const response = await http.post(endpoint, payload);
-      setToken(response.data.token);
-      setUser(response.data.user);
-      setMode('login');
-      setMessage(mode === 'register' ? 'Registration completed.' : 'Authentication successful.');
+      const response = await http.post('/auth', loginForm);
+      const nextOtp = makeOtp();
+      setOtpCode(nextOtp);
+      setOtpInput('');
+      setPendingAuth(response.data);
+      setMessage(`OTP sent to ${response.data.user.email || loginForm.username}. Demo OTP: ${nextOtp}`);
     } catch (error: any) {
-      setMessage(error?.response?.data?.error || 'Authentication failed.');
+      setMessage(error?.response?.data?.error || 'Login failed.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const verifyOtp = (event: FormEvent) => {
+    event.preventDefault();
+    if (!pendingAuth) {
+      return;
+    }
+
+    if (otpInput.trim() !== otpCode) {
+      setMessage('Invalid OTP. Check the code and try again.');
+      return;
+    }
+
+    completeLogin(pendingAuth);
+  };
+
+  const handleRegister = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setMessage('Creating account...');
+
+    if (registerForm.password !== registerForm.confirmPassword) {
+      setMessage('Password and confirm password must match.');
+      setSubmitting(false);
+      return;
+    }
+
+    const fullName = [registerForm.firstName, registerForm.middleName, registerForm.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    try {
+      await http.post('/register', {
+        username: registerForm.username || registerForm.email.split('@')[0],
+        password: registerForm.password,
+        email: registerForm.email,
+        displayName: fullName || registerForm.username,
+        mobileNumber: registerForm.mobileNumber,
+        firstName: registerForm.firstName,
+        middleName: registerForm.middleName,
+        lastName: registerForm.lastName,
+        gender: registerForm.gender,
+        confirmPassword: registerForm.confirmPassword,
+      });
+      setLoginForm({ username: registerForm.username || registerForm.email, password: '' });
+      setRegisterForm(DEFAULT_REGISTRATION);
+      setMessage('Registration completed. Sign in above to verify OTP.');
+      navigateAuth('login');
+    } catch (error: any) {
+      setMessage(error?.response?.data?.error || 'Registration failed.');
     } finally {
       setSubmitting(false);
     }
@@ -311,7 +468,7 @@ export default function App() {
     }
 
     setBusyServerId(selected.id);
-    setStatus('Preparing tunnel');
+    setStatus('Connecting');
 
     try {
       if (window.vpn) {
@@ -320,30 +477,25 @@ export default function App() {
           throw new Error(result.error || 'Desktop tunnel failed.');
         }
 
-        setStatus(`Connected via ${result.protocol || selected.type}`);
-        setMessage('Desktop tunnel created through the Electron bridge. Verifying public IP and DNS state...');
+        setStatus(`Connected to ${selected.country}`);
+        setMessage(`Connected through ${selected.name} using ${result.protocol || selected.type}.`);
       } else {
         await http.get(`/config/${selected.id}`);
         window.open(`${API}/config/${selected.id}/raw`, '_blank', 'noopener,noreferrer');
-        setStatus(`Profile ready for ${selected.type}`);
-        setMessage('Browser client opened the profile supplied by the backend. Browser mode cannot change your real machine IP or DNS.');
+        setStatus(`Profile ready for ${selected.country}`);
+        setMessage('Web mode downloaded the VPN profile. Use the native client for real system routing.');
       }
     } catch (error: any) {
       setStatus('Connection failed');
-      setMessage(error?.message || 'Unable to prepare tunnel.');
+      setMessage(error?.message || 'Unable to prepare VPN connection.');
     } finally {
       setBusyServerId('');
     }
   };
 
   const handleDisconnect = async () => {
-    if (!selected) {
-      return;
-    }
-
-    if (!window.vpn) {
-      setStatus('Browser mode');
-      setMessage('Browser mode does not own the tunnel process, so disconnect is desktop-only.');
+    if (!selected || !window.vpn) {
+      setMessage('Disconnect is available in the native client where the tunnel process is owned.');
       return;
     }
 
@@ -353,9 +505,8 @@ export default function App() {
       if (!result.ok) {
         throw new Error(result.error || 'Disconnect failed.');
       }
-
-      setStatus('Disconnected');
-      setMessage('Desktop tunnel stopped.');
+      setStatus('Not connected');
+      setMessage('VPN disconnected.');
     } catch (error: any) {
       setMessage(error?.message || 'Disconnect failed.');
     } finally {
@@ -367,16 +518,48 @@ export default function App() {
     try {
       await http.post(`/users/${targetId}/role`, { role }, { headers: authHeaders });
       setUsers((current) => current.map((entry) => (entry.id === targetId ? { ...entry, role } : entry)));
-      setMessage('User role updated.');
+      setMessage(role === 'Admin' ? 'User promoted to admin.' : 'Admin access removed from user.');
     } catch (error: any) {
       setMessage(error?.response?.data?.error || 'Role update failed.');
     }
   };
 
+  const signOut = () => {
+    localStorage.removeItem(REMEMBER_KEY);
+    setToken('');
+    setUser(null);
+    setUsers([]);
+    setServers([]);
+    setSelected(null);
+    setPendingAuth(null);
+    setStatus('Not connected');
+    setMessage('Signed out.');
+  };
+
+  const navigateAuth = (nextRoute: 'login' | 'register') => {
+    const path = nextRoute === 'register' ? '/register' : '/';
+    window.history.pushState({}, '', path);
+    setRoute(nextRoute);
+    setPendingAuth(null);
+    setOtpCode('');
+    setOtpInput('');
+  };
+
+  const applySourceKind = (kind: VpnSourceKind) => {
+    setSourceKind(kind);
+    setSourceForm((current) => ({
+      ...current,
+      protocol: kind === 'wireguard-config' ? 'wireguard' : 'openvpn',
+      source: kind === 'free-internet' ? 'Free internet source' : 'Admin',
+      path: kind === 'free-internet' ? '' : current.path,
+      url: kind === 'free-internet' ? current.url : '',
+    }));
+  };
+
   const saveVpnSource = async (event: FormEvent) => {
     event.preventDefault();
     setSourceBusy(true);
-    setMessage('Saving VPN source in backend manifest...');
+    setMessage('Saving VPN source...');
 
     try {
       const payload = {
@@ -385,12 +568,12 @@ export default function App() {
         path: sourceForm.path?.trim() || null,
         url: sourceForm.url?.trim() || null,
       };
-
       const response = await http.post('/vpn/sources', payload, { headers: authHeaders });
       setVpnSources(response.data.sourceManifest?.sources ?? []);
-      await loadDashboard(true);
       setSourceForm(DEFAULT_SOURCE_FORM);
-      setMessage('VPN source saved and backend route inventory refreshed.');
+      setSourceKind('ovpn-file');
+      await loadDashboard();
+      setMessage('VPN source saved and server inventory refreshed.');
     } catch (error: any) {
       setMessage(error?.response?.data?.error || 'VPN source save failed.');
     } finally {
@@ -400,13 +583,13 @@ export default function App() {
 
   const removeVpnSource = async (id: string) => {
     setSourceBusy(true);
-    setMessage(`Removing VPN source ${id}...`);
+    setMessage('Removing VPN source...');
 
     try {
       const response = await http.delete(`/vpn/sources/${id}`, { headers: authHeaders });
       setVpnSources(response.data.sourceManifest?.sources ?? []);
-      await loadDashboard(true);
-      setMessage('VPN source removed and backend inventory refreshed.');
+      await loadDashboard();
+      setMessage('VPN source removed.');
     } catch (error: any) {
       setMessage(error?.response?.data?.error || 'VPN source removal failed.');
     } finally {
@@ -414,14 +597,14 @@ export default function App() {
     }
   };
 
-  const refreshBackendSources = async () => {
+  const refreshSources = async () => {
     setSourceBusy(true);
-    setMessage('Refreshing backend VPN sources through Python collector...');
+    setMessage('Refreshing free VPN sources from backend collector...');
 
     try {
       await http.post('/servers/refresh', {}, { headers: authHeaders });
-      await loadDashboard(true);
-      setMessage('Backend VPN sources refreshed.');
+      await loadDashboard();
+      setMessage('VPN sources refreshed.');
     } catch (error: any) {
       setMessage(error?.response?.data?.error || 'VPN source refresh failed.');
     } finally {
@@ -429,420 +612,413 @@ export default function App() {
     }
   };
 
-  const handleOAuthClick = (provider: Provider) => {
-    if (!provider.enabled) {
-      setMessage(`${provider.name} OAuth is not enabled yet. ${provider.note}`);
-      return;
-    }
-
-    setMessage(`${provider.name} OAuth is configured on the backend. Frontend redirect flow is the next step once credentials are finalized.`);
-  };
-
-  const signOut = () => {
-    setToken('');
-    setUser(null);
-    setUsers([]);
-    setVpnSources([]);
-    setServers([]);
-    setSelected(null);
-    setStatus('Idle');
-    setMessage('Session ended.');
-  };
-
-  const clearSearch = () => {
-    setSearch('');
-    setProtocolFilter('all');
-    setMessage('Server filters cleared.');
-  };
-
-  const pickFastestServer = () => {
-    if (!filteredServers.length) {
-      setMessage('No servers are available for the current filters.');
-      return;
-    }
-
-    const fastest = [...filteredServers].sort((a, b) => a.latencyMs - b.latencyMs)[0];
-    setSelected(fastest);
-    setMessage(`Fastest route selected: ${fastest.name}.`);
-  };
-
-  const pickRecommendedServer = () => {
-    if (!servers.length) {
-      setMessage('Server inventory is still loading.');
-      return;
-    }
-
-    const recommended =
-      servers.find((server) => server.type === 'wireguard') ??
-      [...servers].sort((a, b) => a.latencyMs - b.latencyMs)[0];
-
-    setSelected(recommended);
-    setMessage(`Recommended route selected: ${recommended.name}.`);
-  };
-
   if (!token) {
-    return (
-      <main className="auth-shell">
-        <section className="auth-panel">
-          <div className="eyebrow">FortiClone Control Plane</div>
-          <h1>Operate access, registration, and VPN delivery from one surface.</h1>
-          <p className="lede">
-            Backend health, registration, and OAuth capability are exposed directly from the API
-            now, so the frontend is no longer running as a mock shell.
-          </p>
-          <div className="health-row">
-            <span className={backendHealthy ? 'health-badge live' : 'health-badge down'}>
-              {backendHealthy ? 'Backend online' : 'Backend offline'}
-            </span>
-            <span className="muted">REST `5000` / gRPC `5001`</span>
-          </div>
-
-          <form className="auth-form" onSubmit={handleSubmit}>
-            <div className="mode-row">
-              <button type="button" className={mode === 'login' ? 'mode active' : 'mode'} onClick={() => setMode('login')}>
-                Login
-              </button>
-              <button type="button" className={mode === 'register' ? 'mode active' : 'mode'} onClick={() => setMode('register')}>
-                Register
-              </button>
+    if (route === 'register') {
+      return (
+        <main className="auth-shell register-page">
+          <section className="auth-card register-page-card">
+            <div className="auth-top">
+              <BeyondLogo />
+              <div className="topbar-actions">
+                <button className="theme-toggle" type="button" onClick={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}>
+                  {theme === 'light' ? 'Dark' : 'Light'}
+                </button>
+                <button className="secondary" type="button" onClick={() => navigateAuth('login')}>
+                  Back to login
+                </button>
+              </div>
             </div>
 
+            <div className="auth-title">
+              <h1>Create account</h1>
+              <p>Complete your profile once, then sign in and verify OTP.</p>
+            </div>
+
+            <form className="register-form standalone-register" onSubmit={handleRegister}>
+              <label>
+                Email
+                <input type="email" value={registerForm.email} onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })} autoComplete="email" required />
+              </label>
+              <label>
+                Mobile number
+                <input value={registerForm.mobileNumber} onChange={(e) => setRegisterForm({ ...registerForm, mobileNumber: e.target.value })} autoComplete="tel" required />
+              </label>
+              <label>
+                First name
+                <input value={registerForm.firstName} onChange={(e) => setRegisterForm({ ...registerForm, firstName: e.target.value })} autoComplete="given-name" required />
+              </label>
+              <label>
+                Middle name
+                <input value={registerForm.middleName} onChange={(e) => setRegisterForm({ ...registerForm, middleName: e.target.value })} />
+              </label>
+              <label>
+                Last name
+                <input value={registerForm.lastName} onChange={(e) => setRegisterForm({ ...registerForm, lastName: e.target.value })} autoComplete="family-name" required />
+              </label>
+              <label>
+                Gender
+                <select value={registerForm.gender} onChange={(e) => setRegisterForm({ ...registerForm, gender: e.target.value })} required>
+                  <option value="">Select gender</option>
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                  <option value="Non-binary">Non-binary</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+              </label>
+              <label>
+                Username
+                <input value={registerForm.username} onChange={(e) => setRegisterForm({ ...registerForm, username: e.target.value })} autoComplete="username" required />
+              </label>
+              <label>
+                Password
+                <input type="password" value={registerForm.password} onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })} autoComplete="new-password" required />
+              </label>
+              <label>
+                Confirm password
+                <input type="password" value={registerForm.confirmPassword} onChange={(e) => setRegisterForm({ ...registerForm, confirmPassword: e.target.value })} autoComplete="new-password" required />
+              </label>
+              <button className="primary wide" disabled={submitting || !backendHealthy}>
+                {submitting ? 'Creating...' : 'Create account'}
+              </button>
+            </form>
+
+            <p className={backendHealthy ? 'system-message ok' : 'system-message'}>{message}</p>
+          </section>
+          {notice && <Toast notice={notice} onClose={() => setNotice(null)} />}
+        </main>
+      );
+    }
+
+    return (
+      <main className="auth-shell">
+        <section className="auth-card">
+          <div className="auth-top">
+            <BeyondLogo />
+            <button
+              className="theme-toggle"
+              type="button"
+              onClick={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}
+            >
+              {theme === 'light' ? 'Dark' : 'Light'}
+            </button>
+          </div>
+
+          <div className="auth-title">
+            <h1>Login</h1>
+            <p>Choose your account, verify OTP, then connect to a VPN country.</p>
+          </div>
+
+          <form className="login-form" onSubmit={handleLogin}>
             <label>
               Username
-              <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
+              <input value={loginForm.username} onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })} autoComplete="username" />
             </label>
             <label>
               Password
-              <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <input type="password" value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} autoComplete="current-password" />
             </label>
-
-            {mode === 'register' && (
-              <>
-                <label>
-                  Display name
-                  <input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
-                </label>
-                <label>
-                  Email
-                  <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-                </label>
-              </>
-            )}
-
-            <button className="primary" disabled={submitting || !backendHealthy}>
-              {submitting ? 'Working...' : mode === 'register' ? 'Create account' : 'Enter console'}
+            <label className="check-row">
+              <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+              Remember me on this browser
+            </label>
+            <button className="primary wide" disabled={submitting || !backendHealthy}>
+              {submitting ? 'Working...' : 'Continue'}
             </button>
           </form>
 
-          <div className="oauth-block">
-            <div className="section-kicker">OAuth</div>
+          {pendingAuth && (
+            <form className="otp-box" onSubmit={verifyOtp}>
+              <div>
+                <strong>OTP verification</strong>
+                <p>Enter the six digit code sent to your email.</p>
+              </div>
+              <input value={otpInput} onChange={(e) => setOtpInput(e.target.value)} inputMode="numeric" maxLength={6} placeholder="000000" />
+              <button className="secondary wide">Verify OTP</button>
+            </form>
+          )}
+
+          <button type="button" className="register-link-card" onClick={() => navigateAuth('register')}>
+            <span>Create a new account</span>
+            <strong>Open registration page</strong>
+          </button>
+
+          <div className="oauth-row">
             {providers.map((provider) => (
-              <button key={provider.id} type="button" className="oauth-button" onClick={() => handleOAuthClick(provider)}>
-                Continue with {provider.name}
-                <span>{provider.enabled ? 'Client configured' : provider.note}</span>
+              <button key={provider.id} type="button" className="oauth-button" onClick={() => setMessage(provider.enabled ? `${provider.name} OAuth is available from the backend.` : provider.note)}>
+                {provider.name}
               </button>
             ))}
           </div>
 
-          <p className="status-copy">{message}</p>
+          <p className={backendHealthy ? 'system-message ok' : 'system-message'}>{message}</p>
         </section>
+        {notice && <Toast notice={notice} onClose={() => setNotice(null)} />}
       </main>
     );
   }
 
+  const isAdmin = user?.role === 'Admin';
+
   return (
-    <main className="dashboard">
-      <aside className="left-rail">
-        <div className="session-card">
-          <div className="eyebrow">Session</div>
-          <h2>{user?.displayName || user?.username}</h2>
-          <p className="muted">{user?.email || 'Local account'}</p>
-          <div className="chip-row">
-            <span className="chip">{user?.role}</span>
-            <span className="chip subdued">{user?.provider}</span>
-          </div>
-          <button type="button" className="secondary rail-action" onClick={signOut}>
-            Sign out
+    <main className="app-shell">
+      <header className="topbar">
+        <BeyondLogo />
+        <div className="topbar-actions">
+          <span className={backendHealthy ? 'status-pill up' : 'status-pill down'}>{backendHealthy ? 'Backend online' : 'Backend offline'}</span>
+          <button className="theme-toggle" type="button" onClick={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}>
+            {theme === 'light' ? 'Dark' : 'Light'}
           </button>
+          <button className="secondary" type="button" onClick={signOut}>Sign out</button>
         </div>
+      </header>
 
-        <div className="search-card">
-          <div className="section-kicker">Route Catalog</div>
-          <label>
-            Server search
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="country, name, protocol" />
-          </label>
-          <div className="filter-row">
-            <button type="button" className={protocolFilter === 'all' ? 'mode active compact' : 'mode compact'} onClick={() => setProtocolFilter('all')}>
-              All
-            </button>
-            <button type="button" className={protocolFilter === 'openvpn' ? 'mode active compact' : 'mode compact'} onClick={() => setProtocolFilter('openvpn')}>
-              OpenVPN
-            </button>
-            <button type="button" className={protocolFilter === 'wireguard' ? 'mode active compact' : 'mode compact'} onClick={() => setProtocolFilter('wireguard')}>
-              WireGuard
-            </button>
-          </div>
-          <div className="search-actions">
-            <button type="button" className="secondary compact-action" onClick={() => loadDashboard(true)} disabled={reloadingData}>
-              {reloadingData ? 'Refreshing...' : 'Refresh data'}
-            </button>
-            <button type="button" className="secondary compact-action" onClick={clearSearch}>
-              Clear
-            </button>
-          </div>
-          <div className="search-actions">
-            <button type="button" className="secondary compact-action" onClick={pickFastestServer}>
-              Fastest route
-            </button>
-            <button type="button" className="secondary compact-action" onClick={pickRecommendedServer}>
-              Recommended
-            </button>
-          </div>
-        </div>
-
-        <div className="server-list">
-          {filteredServers.map((server) => (
-            <button
-              key={server.id}
-              type="button"
-              className={selected?.id === server.id ? 'server-card active' : 'server-card'}
-              onClick={() => setSelected(server)}
-            >
-              <div>
-                <strong>{server.name}</strong>
-                <span>{server.country}</span>
-              </div>
-              <div className="server-meta">
-                <span>{server.type}</span>
-                <span>{server.latencyMs} ms</span>
-              </div>
-              <div className="server-submeta">{server.source || 'source unknown'}</div>
-            </button>
-          ))}
-        </div>
-      </aside>
-
-      <section className="main-panel">
-        <div className="status-banner">
-          <div>
-            <div className="section-kicker">Live Status</div>
-            <strong>{status}</strong>
-          </div>
-          <p>{message}</p>
-        </div>
-
-        <div className="metrics-grid telemetry-grid">
-          <article className="metric-card">
-            <span className="section-kicker">Public IP</span>
-            <strong>{networkTelemetry?.publicNetwork.ip || 'Browser-owned'}</strong>
-            <p>
-              {networkTelemetry
-                ? [networkTelemetry.publicNetwork.city, networkTelemetry.publicNetwork.region, networkTelemetry.publicNetwork.country].filter(Boolean).join(', ') || 'Location unavailable'
-                : 'The browser shell cannot change your actual public IP. Use the desktop or Android client for real tunneling.'}
-            </p>
-            {networkTelemetry && baselineTelemetry && (
-              <div className={ipChanged ? 'proof-badge changed' : 'proof-badge unchanged'}>
-                {ipChanged ? 'IP changed after tunnel' : 'IP unchanged from baseline'}
-              </div>
-            )}
-          </article>
-          <article className="metric-card">
-            <span className="section-kicker">DNS</span>
-            <strong>{networkTelemetry?.dnsServers[0] || 'Unchanged'}</strong>
-            <p>
-              {networkTelemetry
-                ? `${networkTelemetry.dnsServers.length} configured resolver(s): ${networkTelemetry.dnsServers.join(', ')}`
-                : 'Browser mode keeps the host machine DNS exactly as it is.'}
-            </p>
-            {networkTelemetry && baselineTelemetry && (
-              <div className={dnsChanged ? 'proof-badge changed' : 'proof-badge unchanged'}>
-                {dnsChanged ? 'DNS changed after tunnel' : 'DNS unchanged from baseline'}
-              </div>
-            )}
-          </article>
-          <article className="metric-card">
-            <span className="section-kicker">Tunnel Reality</span>
-            <strong>{networkTelemetry?.tunnelCount ? `${networkTelemetry.tunnelCount} active` : isDesktopTunnelMode ? 'No active tunnel' : 'Profile-only mode'}</strong>
-            <p>
-              {isDesktopTunnelMode
-                ? 'Desktop mode can verify actual tunnel ownership and host networking state.'
-                : 'Web mode can prepare a route profile, but it cannot alter system routing or DNS on its own.'}
-            </p>
-            {networkTelemetry?.capabilities && (
-              <div className="capability-stack">
-                <div className={networkTelemetry.capabilities.openVpnInstalled ? 'proof-badge changed' : 'proof-badge unchanged'}>
-                  {networkTelemetry.capabilities.openVpnInstalled ? 'OpenVPN installed' : 'OpenVPN missing'}
-                </div>
-                <div className={networkTelemetry.capabilities.wireGuardInstalled ? 'proof-badge changed' : 'proof-badge unchanged'}>
-                  {networkTelemetry.capabilities.wireGuardInstalled ? 'WireGuard installed' : 'WireGuard missing'}
-                </div>
-              </div>
-            )}
-          </article>
-        </div>
-
-        <div className="hero-card">
-          <div className="hero-copy">
-            <div className="section-kicker">Secure Routing</div>
-            <h1>{selected?.name || 'Choose a server'}</h1>
-            <p>{selected ? `${selected.country} / ${selected.type} / ${selected.latencyMs} ms` : 'Select an exit node from the left rail.'}</p>
-            <div className="hero-meta">
-              <span className="chip">{selected?.country || 'No region'}</span>
-              <span className="chip subdued">{selected?.type || 'No protocol'}</span>
-              <span className="chip subdued">{selected?.source || 'No source'}</span>
-            </div>
-            <div className="hero-grid">
-              <div className="hero-mini-card">
-                <span className="section-kicker">Protection</span>
-                <strong>{isConnected ? 'Tunnel active' : 'Standby'}</strong>
-                <p>{isDesktopTunnelMode ? 'Desktop shell can own tunnel state directly.' : 'Browser shell prepares secure profiles for the native client.'}</p>
-              </div>
-              <div className="hero-mini-card">
-                <span className="section-kicker">Policy</span>
-                <strong>{backendHealthy ? 'Compliant' : 'Awaiting backend'}</strong>
-                <p>Unified agent posture, identity, and routing state are being surfaced in one console.</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="hero-actions">
-            <button className="primary" onClick={handleConnect} disabled={!canConnect}>
-              {busyServerId ? 'Working...' : isDesktopTunnelMode ? 'Connect tunnel' : 'Download profile'}
-            </button>
-            <button className="secondary" onClick={handleDisconnect} disabled={!canDisconnect}>
-              Disconnect
-            </button>
-            <button className="secondary" onClick={() => loadDashboard(true)} disabled={reloadingData}>
-              Sync
-            </button>
-          </div>
-        </div>
-
-        <div className="metrics-grid">
-          <article className="metric-card">
-            <span className="section-kicker">Backend</span>
-            <strong>{backendHealthy ? 'Healthy' : 'Offline'}</strong>
-            <p>API health, auth, and user data are being read from the live .NET service.</p>
-          </article>
-          <article className="metric-card">
-            <span className="section-kicker">Connection</span>
-            <strong>{status}</strong>
-            <p>{isDesktopTunnelMode ? 'Desktop mode can create and stop tunnel processes.' : 'Browser mode prepares profiles and opens the backend config.'}</p>
-          </article>
-          <article className="metric-card">
-            <span className="section-kicker">Fleet</span>
-            <strong>{servers.length} nodes</strong>
-            <p>Filters, refresh, and selection now all drive real state changes.</p>
-          </article>
-        </div>
-
-        <div className="management-card">
-          <div className="management-head">
+      {isAdmin ? (
+        <section className="admin-dashboard">
+          <section className="admin-hero">
             <div>
-              <div className="section-kicker">User Management</div>
-              <h3>Identity records and roles</h3>
+              <span className="label">Admin dashboard</span>
+              <h1>Manage VPN servers and users</h1>
+              <p>Add OVPN files, WireGuard configs, or free internet VPN sources. Then promote or demote users from one place.</p>
             </div>
-          </div>
+            <button className="primary" type="button" onClick={refreshSources} disabled={sourceBusy}>
+              {sourceBusy ? 'Refreshing...' : 'Refresh internet sources'}
+            </button>
+          </section>
 
-          {user?.role !== 'Admin' ? (
-            <p className="muted">Admin access is required to manage other users.</p>
-          ) : (
-            <div className="user-table">
-              {users.map((entry) => (
-                <div key={entry.id} className="user-row">
+          <section className="admin-grid">
+            <section className="user-panel source-panel">
+              <div className="panel-heading">
+                <div>
+                  <span>VPN server source</span>
+                  <h2>Add server</h2>
+                </div>
+              </div>
+
+              <div className="source-kind-grid">
+                <button type="button" className={sourceKind === 'ovpn-file' ? 'source-kind active' : 'source-kind'} onClick={() => applySourceKind('ovpn-file')}>
+                  <strong>OVPN file</strong>
+                  <span>OpenVPN .ovpn path</span>
+                </button>
+                <button type="button" className={sourceKind === 'wireguard-config' ? 'source-kind active' : 'source-kind'} onClick={() => applySourceKind('wireguard-config')}>
+                  <strong>WireGuard</strong>
+                  <span>.conf path</span>
+                </button>
+                <button type="button" className={sourceKind === 'free-internet' ? 'source-kind active' : 'source-kind'} onClick={() => applySourceKind('free-internet')}>
+                  <strong>Free internet VPN</strong>
+                  <span>Public config URL</span>
+                </button>
+              </div>
+
+              <form className="source-form" onSubmit={saveVpnSource}>
+                <label>
+                  Source id
+                  <input value={sourceForm.id} onChange={(e) => setSourceForm({ ...sourceForm, id: e.target.value })} placeholder="us-openvpn-01" />
+                </label>
+                <label>
+                  Server name
+                  <input value={sourceForm.name} onChange={(e) => setSourceForm({ ...sourceForm, name: e.target.value })} placeholder="US Free OpenVPN" required />
+                </label>
+                <label>
+                  Country
+                  <input value={sourceForm.country} onChange={(e) => setSourceForm({ ...sourceForm, country: e.target.value })} placeholder="United States" required />
+                </label>
+                <label>
+                  Protocol
+                  <select value={sourceForm.protocol} onChange={(e) => setSourceForm({ ...sourceForm, protocol: e.target.value as VpnSource['protocol'] })}>
+                    <option value="openvpn">OpenVPN / OVPN</option>
+                    <option value="wireguard">WireGuard</option>
+                  </select>
+                </label>
+                <label>
+                  Latency estimate
+                  <input type="number" min="1" value={sourceForm.latencyMs} onChange={(e) => setSourceForm({ ...sourceForm, latencyMs: Number(e.target.value) || 999 })} />
+                </label>
+                <label>
+                  Source label
+                  <input value={sourceForm.source} onChange={(e) => setSourceForm({ ...sourceForm, source: e.target.value })} />
+                </label>
+                {sourceKind === 'free-internet' ? (
+                  <label className="span-two">
+                    Public config URL
+                    <input value={sourceForm.url ?? ''} onChange={(e) => setSourceForm({ ...sourceForm, url: e.target.value })} placeholder="https://example.com/free-profile.ovpn" required />
+                  </label>
+                ) : (
+                  <label className="span-two">
+                    Local config path
+                    <input value={sourceForm.path ?? ''} onChange={(e) => setSourceForm({ ...sourceForm, path: e.target.value })} placeholder={sourceKind === 'wireguard-config' ? 'samples/wireguard-sample.conf' : 'samples/openvpn-sample.ovpn'} required />
+                  </label>
+                )}
+                <button className="primary wide span-two" disabled={sourceBusy}>
+                  {sourceBusy ? 'Saving...' : 'Save VPN server'}
+                </button>
+              </form>
+            </section>
+
+            <section className="user-panel">
+              <div className="panel-heading">
+                <div>
+                  <span>Source inventory</span>
+                  <h2>Configured VPN sources</h2>
+                </div>
+              </div>
+              <div className="source-list">
+                {vpnSources.map((source) => (
+                  <div className="source-row" key={source.id}>
+                    <div>
+                      <strong>{source.name}</strong>
+                      <span>{source.protocol} / {source.country}</span>
+                      <span>{source.path || source.url || 'No path or URL saved'}</span>
+                    </div>
+                    <button className="secondary danger-action" type="button" onClick={() => removeVpnSource(source.id)} disabled={sourceBusy}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                {!vpnSources.length && <p className="empty-copy">No admin VPN sources saved yet.</p>}
+              </div>
+            </section>
+          </section>
+
+          <section className="user-panel">
+            <div className="panel-heading">
+              <div>
+                <span>User assignment</span>
+                <h2>Common users and admins</h2>
+              </div>
+            </div>
+            <div className="user-tools">
+              <input value={userSearch} onChange={(e) => setUserSearch(e.target.value)} placeholder="Search users" />
+              <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as typeof roleFilter)}>
+                <option value="all">All roles</option>
+                <option value="Admin">Admins</option>
+                <option value="User">Common users</option>
+              </select>
+            </div>
+            <div className="user-list">
+              {filteredUsers.map((entry) => (
+                <div className="user-row admin-user-row" key={entry.id}>
                   <div>
                     <strong>{entry.displayName || entry.username}</strong>
-                    <span>{entry.email || entry.username}</span>
-                  </div>
-                  <div className="user-row-meta">
-                    <span>{entry.provider}</span>
-                    <span>{entry.lastLoginAt ? new Date(entry.lastLoginAt).toLocaleString() : 'No login yet'}</span>
+                    <span>{entry.email || `@${entry.username}`}</span>
                   </div>
                   <select value={entry.role} onChange={(e) => updateRole(entry.id, e.target.value)}>
                     <option value="Admin">Admin</option>
-                    <option value="User">User</option>
+                    <option value="User">Common user</option>
                   </select>
                 </div>
               ))}
             </div>
-          )}
-        </div>
-
-        {user?.role === 'Admin' && (
-          <div className="management-card">
-            <div className="management-head">
+          </section>
+        </section>
+      ) : (
+        <section className="dashboard-grid">
+          <aside className="country-panel">
+            <div className="panel-heading">
               <div>
-                <div className="section-kicker">VPN Source Control</div>
-                <h3>OpenVPN and WireGuard backend configuration</h3>
+                <span>User dashboard</span>
+                <h2>Choose location</h2>
               </div>
-              <button type="button" className="secondary" onClick={refreshBackendSources} disabled={sourceBusy}>
-                {sourceBusy ? 'Working...' : 'Refresh collector'}
+              <button className="icon-button" type="button" onClick={() => loadDashboard(true)} disabled={reloadingData}>
+                {reloadingData ? '...' : 'Refresh'}
               </button>
             </div>
 
-            <form className="source-form" onSubmit={saveVpnSource}>
-              <label>
-                Source id
-                <input value={sourceForm.id} onChange={(e) => setSourceForm({ ...sourceForm, id: e.target.value })} placeholder="my-wireguard-node" />
-              </label>
-              <label>
-                Display name
-                <input value={sourceForm.name} onChange={(e) => setSourceForm({ ...sourceForm, name: e.target.value })} placeholder="WireGuard Singapore" />
-              </label>
-              <label>
-                Country
-                <input value={sourceForm.country} onChange={(e) => setSourceForm({ ...sourceForm, country: e.target.value })} />
-              </label>
-              <label>
-                Protocol
-                <select value={sourceForm.protocol} onChange={(e) => setSourceForm({ ...sourceForm, protocol: e.target.value as VpnSource['protocol'] })}>
-                  <option value="wireguard">WireGuard</option>
-                  <option value="openvpn">OpenVPN</option>
-                </select>
-              </label>
-              <label>
-                Latency estimate
-                <input
-                  type="number"
-                  min="1"
-                  value={sourceForm.latencyMs}
-                  onChange={(e) => setSourceForm({ ...sourceForm, latencyMs: Number(e.target.value) || 999 })}
-                />
-              </label>
-              <label>
-                Local config path
-                <input value={sourceForm.path ?? ''} onChange={(e) => setSourceForm({ ...sourceForm, path: e.target.value })} placeholder="samples/wireguard-sample.conf" />
-              </label>
-              <label>
-                Remote config URL
-                <input value={sourceForm.url ?? ''} onChange={(e) => setSourceForm({ ...sourceForm, url: e.target.value })} placeholder="https://example.com/profile.conf" />
-              </label>
-              <button type="submit" className="primary" disabled={sourceBusy}>
-                Save VPN source
-              </button>
-            </form>
+            <input className="search-input" value={countrySearch} onChange={(e) => setCountrySearch(e.target.value)} placeholder="Search country" />
 
-            <div className="source-grid">
-              {vpnSources.map((source) => (
-                <div key={source.id} className="source-row">
+            <div className="country-list">
+              {visibleCountries.map((entry) => (
+                <button
+                  key={entry.country}
+                  className={selected?.country === entry.country ? 'country-card active' : 'country-card'}
+                  type="button"
+                  onClick={() => setSelected(entry.fastest)}
+                >
                   <div>
-                    <strong>{source.name}</strong>
-                    <span>{source.id}</span>
+                    <strong>{entry.country}</strong>
+                    <span>{entry.total} server{entry.total === 1 ? '' : 's'} available</span>
                   </div>
-                  <div className="user-row-meta">
-                    <span>{source.protocol} / {source.country}</span>
-                    <span>{source.path || source.url || 'No config location'}</span>
+                  <div className="country-meta">
+                    <span className={entry.up ? 'dot-label up' : 'dot-label down'}>{entry.up ? 'Up' : 'Down'}</span>
+                    <span>{entry.avgLatency} ms</span>
                   </div>
-                  <button type="button" className="secondary danger-action" onClick={() => removeVpnSource(source.id)} disabled={sourceBusy}>
-                    Remove
-                  </button>
-                </div>
+                </button>
               ))}
             </div>
-          </div>
-        )}
-      </section>
+          </aside>
+
+          <section className="connect-panel">
+            <div className="connect-card">
+              <div className={isConnected ? 'vpn-orb connected' : 'vpn-orb'}>
+                <span>{isConnected ? 'ON' : 'VPN'}</span>
+              </div>
+              <div className="connect-copy">
+                <span className="label">Selected country</span>
+                <h1>{selected?.country || 'No country selected'}</h1>
+                <p>{selected ? `${selected.name} / ${selected.type.toUpperCase()} / ${selected.latencyMs} ms` : 'Pick a country from the left, then press Connect.'}</p>
+                <div className="action-row">
+                  <button className="primary" type="button" onClick={handleConnect} disabled={!canConnect}>
+                    {busyServerId ? 'Connecting...' : 'Connect'}
+                  </button>
+                  <button className="secondary" type="button" onClick={handleDisconnect} disabled={!canDisconnect}>
+                    Disconnect
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="status-strip">
+              <article>
+                <span>Status</span>
+                <strong>{status}</strong>
+              </article>
+              <article>
+                <span>Mode</span>
+                <strong>{window.vpn ? 'Native tunnel' : 'Web profile'}</strong>
+              </article>
+              <article>
+                <span>Account</span>
+                <strong>{user?.displayName || user?.username}</strong>
+              </article>
+            </div>
+
+            <section className="chart-card realtime-panel">
+              <div className="panel-heading">
+                <div>
+                  <span>Realtime availability</span>
+                  <h2>Up vs down trend</h2>
+                </div>
+                <div className="chart-legend">
+                  <span className="legend-up">Up {availabilityTotals.up}</span>
+                  <span className="legend-down">Down {availabilityTotals.down}</span>
+                </div>
+              </div>
+              <svg className="realtime-chart" viewBox="0 0 640 240" role="img" aria-label="Realtime up and down VPN server chart">
+                <path className="grid-line" d="M 0 40 H 640 M 0 125 H 640 M 0 210 H 640" />
+                <path className="line-up" d={getLinePath('up')} />
+                <path className="line-down" d={getLinePath('down')} />
+              </svg>
+              <div className="chart-times">
+                <span>{availabilityHistory[0]?.time || 'Waiting'}</span>
+                <span>{availabilityHistory.at(-1)?.time || 'Waiting'}</span>
+              </div>
+            </section>
+          </section>
+        </section>
+      )}
+
+      <footer className="footer-message">{message}</footer>
+      {notice && <Toast notice={notice} onClose={() => setNotice(null)} />}
     </main>
+  );
+}
+
+function Toast({ notice, onClose }: { notice: Notice; onClose: () => void }) {
+  return (
+    <div className={`toast toast-${notice.tone}`} role="status" aria-live="polite">
+      <p>{notice.text}</p>
+      <button type="button" onClick={onClose} aria-label="Close message">
+        x
+      </button>
+    </div>
   );
 }

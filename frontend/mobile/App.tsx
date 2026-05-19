@@ -492,11 +492,11 @@ export default function App() {
         <StatusBar barStyle="light-content" />
         <ScrollView contentContainerStyle={styles.authWrap}>
           <View style={styles.heroBlock}>
-            <Text style={styles.eyebrow}>FortiClone Android</Text>
-            <Text style={styles.title}>A mobile VPN surface that looks serious and tells the truth.</Text>
+            <Text style={styles.eyebrow}>FortiClient posture / Proton privacy</Text>
+            <Text style={styles.title}>Enterprise VPN control, private by design.</Text>
             <Text style={styles.copy}>
-              Android uses the same backend contract as web and desktop for auth, registration,
-              profile inventory, and route preparation.
+              Android uses the same encrypted registration, OAuth readiness, route inventory,
+              and OpenVPN/WireGuard preparation contract as web and desktop.
             </Text>
             <View style={styles.badgeRow}>
               <View style={[styles.badge, backendHealthy ? styles.badgeLive : styles.badgeDown]}>
@@ -776,6 +776,9 @@ export default function App() {
               ? `${selected.country} | ${selected.type} | ${selected.latencyMs} ms | ${selected.source || 'source unknown'}`
               : 'Pick a server below to prepare a profile.'}
           </Text>
+          <View style={styles.connectionOrb}>
+            <Text style={styles.connectionOrbText}>{nativeVpnState.running ? 'ON' : selected?.type?.toUpperCase() || 'VPN'}</Text>
+          </View>
         </View>
 
         <View style={styles.panel}>
@@ -812,7 +815,7 @@ export default function App() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#07111a',
+    backgroundColor: '#050b14',
   },
   authWrap: {
     padding: 20,
@@ -823,49 +826,49 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   heroBlock: {
-    borderRadius: 28,
-    padding: 22,
-    backgroundColor: 'rgba(10, 23, 35, 0.92)',
+    borderRadius: 30,
+    padding: 24,
+    backgroundColor: '#091522',
     borderWidth: 1,
-    borderColor: 'rgba(89, 208, 255, 0.14)',
+    borderColor: 'rgba(91, 215, 255, 0.22)',
   },
   heroCard: {
-    borderRadius: 28,
-    padding: 22,
-    backgroundColor: 'rgba(10, 23, 35, 0.92)',
+    borderRadius: 30,
+    padding: 24,
+    backgroundColor: '#091522',
     borderWidth: 1,
-    borderColor: 'rgba(89, 208, 255, 0.14)',
+    borderColor: 'rgba(91, 215, 255, 0.22)',
   },
   panel: {
-    borderRadius: 24,
+    borderRadius: 26,
     padding: 18,
-    backgroundColor: 'rgba(14, 28, 42, 0.92)',
+    backgroundColor: '#101d2e',
     borderWidth: 1,
-    borderColor: 'rgba(89, 208, 255, 0.14)',
+    borderColor: 'rgba(126, 168, 214, 0.18)',
     gap: 12,
   },
   eyebrow: {
-    color: '#59d0ff',
+    color: '#5bd7ff',
     textTransform: 'uppercase',
     letterSpacing: 2,
     fontSize: 12,
     fontWeight: '700',
   },
   title: {
-    color: '#edf6ff',
-    fontSize: 34,
-    lineHeight: 38,
+    color: '#f2f7ff',
+    fontSize: 38,
+    lineHeight: 42,
     fontWeight: '700',
     marginTop: 8,
   },
   sectionTitle: {
-    color: '#edf6ff',
+    color: '#f2f7ff',
     fontSize: 24,
     lineHeight: 28,
     fontWeight: '700',
   },
   copy: {
-    color: '#8ea8bf',
+    color: '#93a9bf',
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,
@@ -879,18 +882,18 @@ const styles = StyleSheet.create({
   badge: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(89, 208, 255, 0.16)',
+    borderColor: 'rgba(126, 168, 214, 0.18)',
     backgroundColor: 'rgba(255,255,255,0.03)',
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
   badgeLive: {
-    backgroundColor: 'rgba(39, 245, 194, 0.14)',
-    borderColor: 'rgba(39, 245, 194, 0.22)',
+    backgroundColor: 'rgba(49, 239, 199, 0.14)',
+    borderColor: 'rgba(49, 239, 199, 0.24)',
   },
   badgeDown: {
-    backgroundColor: 'rgba(255, 125, 109, 0.14)',
-    borderColor: 'rgba(255, 125, 109, 0.22)',
+    backgroundColor: 'rgba(255, 59, 47, 0.14)',
+    borderColor: 'rgba(255, 59, 47, 0.24)',
   },
   badgeText: {
     color: '#d8ecff',
@@ -923,8 +926,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   toggleActive: {
-    backgroundColor: '#59d0ff',
-    borderColor: '#59d0ff',
+    backgroundColor: '#5bd7ff',
+    borderColor: '#5bd7ff',
   },
   toggleText: {
     color: '#d8ecff',
@@ -942,13 +945,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(160, 208, 255, 0.14)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    color: '#edf6ff',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    color: '#f2f7ff',
     padding: 16,
   },
   primaryButton: {
     borderRadius: 18,
-    backgroundColor: '#59d0ff',
+    backgroundColor: '#5bd7ff',
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -976,7 +979,7 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   secondaryButtonText: {
-    color: '#edf6ff',
+    color: '#f2f7ff',
     fontWeight: '700',
   },
   oauthRow: {
@@ -1004,7 +1007,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   oauthChevron: {
-    color: '#59d0ff',
+    color: '#5bd7ff',
     fontSize: 22,
   },
   footer: {
@@ -1042,7 +1045,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   proofLabel: {
-    color: '#59d0ff',
+    color: '#5bd7ff',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -1062,8 +1065,25 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   serverCardActive: {
-    borderColor: 'rgba(89, 208, 255, 0.34)',
-    backgroundColor: 'rgba(89, 208, 255, 0.08)',
+    borderColor: 'rgba(91, 215, 255, 0.42)',
+    backgroundColor: 'rgba(91, 215, 255, 0.1)',
+  },
+  connectionOrb: {
+    width: 132,
+    height: 132,
+    borderRadius: 999,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(91, 215, 255, 0.34)',
+    backgroundColor: 'rgba(91, 215, 255, 0.12)',
+  },
+  connectionOrbText: {
+    color: '#5bd7ff',
+    fontSize: 24,
+    fontWeight: '900',
   },
   serverTopRow: {
     flexDirection: 'row',
