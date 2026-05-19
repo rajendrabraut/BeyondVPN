@@ -1,0 +1,52 @@
+syntax = "proto3";
+option csharp_namespace = "VpnServer";
+
+package vpn;
+
+service VpnService {
+  rpc Authenticate (AuthRequest) returns (AuthResponse);
+  rpc GetServers (Empty) returns (ServerList);
+  rpc GetConfig (ConfigRequest) returns (ConfigResponse);
+  rpc ReportStatus (StatusReport) returns (Empty);
+}
+
+message Empty {}
+
+message AuthRequest {
+  string username = 1;
+  string password = 2;
+}
+message AuthResponse {
+  bool success = 1;
+  string token = 2;
+  string message = 3;
+}
+
+message Server {
+  string id = 1;
+  string name = 2;
+  string country = 3;
+  string type = 4; // wireguard or openvpn
+  int32 latency_ms = 5;
+  bool is_free = 6;
+}
+
+message ServerList {
+  repeated Server servers = 1;
+}
+
+message ConfigRequest {
+  string server_id = 1;
+  string client_public_key = 2; // for wireguard
+}
+
+message ConfigResponse {
+  string config = 1;
+  string type = 2;
+}
+
+message StatusReport {
+  string server_id = 1;
+  string status = 2; // connected/disconnected
+  string client_ip = 3;
+}

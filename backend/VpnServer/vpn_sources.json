@@ -1,0 +1,24 @@
+{
+  "sources": [
+    {
+      "id": "sample-openvpn-manifest",
+      "name": "Sample OpenVPN Import",
+      "country": "Custom",
+      "protocol": "openvpn",
+      "latencyMs": 28,
+      "source": "Manifest",
+      "isFree": true,
+      "path": "samples/openvpn-sample.ovpn"
+    },
+    {
+      "id": "sample-wireguard-manifest",
+      "name": "Sample WireGuard Import",
+      "country": "Custom",
+      "protocol": "wireguard",
+      "latencyMs": 35,
+      "source": "Manifest",
+      "isFree": true,
+      "path": "samples/wireguard-sample.conf"
+    }
+  ]
+}
