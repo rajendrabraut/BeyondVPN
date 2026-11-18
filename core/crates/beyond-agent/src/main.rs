@@ -96,7 +96,8 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let store = store::Store::open(store::Store::default_dir())?;
-    let engine = Arc::new(engine::Engine::new(store, tunnel::platform_backend()));
+    let backend = tunnel::platform_backend(&store.dir);
+    let engine = Arc::new(engine::Engine::new(store, backend));
     match Cli::parse().cmd {
         Cmd::Login { api, email, totp } => {
             let pw = read_password()?;

@@ -99,10 +99,10 @@ impl Backend for WgQuickBackend {
     }
 }
 
-/// No-op backend for tests/CI (`BEYOND_AGENT_DRY_RUN=1`).
-#[derive(Default)]
+/// No-op backend for tests/CI (`BEYOND_AGENT_DRY_RUN=1`). State is a marker
+/// file so separate CLI invocations agree on whether the tunnel is "up".
 pub struct DryRunBackend {
-    pub up: std::sync::atomic::AtomicBool,
+    pub marker: PathBuf,
 }
 
 impl Backend for DryRunBackend {
@@ -111,21 +111,23 @@ impl Backend for DryRunBackend {
     }
     fn up(&self, conf: &Path) -> anyhow::Result<()> {
         anyhow::ensure!(conf.exists(), "config not written");
-        self.up.store(true, std::sync::atomic::Ordering::SeqCst);
+        let text = std::fs::read_to_string(conf)?;
+        anyhow::ensure!(text.contains("[Interface]") && text.contains("[Peer]"), "config malformed");
+        std::fs::write(&self.marker, b"up")?;
         Ok(())
     }
     fn down(&self, _conf: &Path) -> anyhow::Result<()> {
-        self.up.store(false, std::sync::atomic::Ordering::SeqCst);
+        let _ = std::fs::remove_file(&self.marker);
         Ok(())
     }
     fn stats(&self) -> TunnelStats {
-        TunnelStats { up: self.up.load(std::sync::atomic::Ordering::SeqCst), ..Default::default() }
+        TunnelStats { up: self.marker.exists(), ..Default::default() }
     }
 }
 
-pub fn platform_backend() -> Box<dyn Backend> {
+pub fn platform_backend(state_dir: &Path) -> Box<dyn Backend> {
     if std::env::var("BEYOND_AGENT_DRY_RUN").as_deref() == Ok("1") {
-        return Box::new(DryRunBackend::default());
+        return Box::new(DryRunBackend { marker: state_dir.join("dryrun.up") });
     }
     if cfg!(windows) {
         Box::new(WindowsBackend::default())

@@ -8,7 +8,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Settings {
     #[serde(default = "yes")]
     pub kill_switch: bool,
@@ -24,6 +24,13 @@ pub struct Settings {
 
 fn yes() -> bool {
     true
+}
+
+impl Default for Settings {
+    /// Secure by default: kill switch on, LAN blocked, no split tunnel.
+    fn default() -> Self {
+        Settings { kill_switch: true, allow_lan: false, exclude_routes: vec![], auto_connect: false, preferred_server: None }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -156,6 +163,9 @@ mod tests {
         let s = Store::open(tmpdir("state")).unwrap();
         let mut st = s.load();
         assert!(st.settings.exclude_routes.is_empty());
+        assert!(st.settings.kill_switch, "kill switch must default to ON");
+        let parsed: AgentState = serde_json::from_str(r#"{"settings":{}}"#).unwrap();
+        assert!(parsed.settings.kill_switch);
         st.email = Some("a@b.c".into());
         s.save(&st).unwrap();
         assert_eq!(s.load().email.as_deref(), Some("a@b.c"));

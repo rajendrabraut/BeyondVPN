@@ -120,7 +120,7 @@ pub fn blocked_response(query: &[u8], q: &Question) -> Vec<u8> {
         out.extend_from_slice(&300u32.to_be_bytes());
         let rdlen: u16 = if q.qtype == TYPE_A { 4 } else { 16 };
         out.extend_from_slice(&rdlen.to_be_bytes());
-        out.extend(std::iter::repeat(0u8).take(rdlen as usize));
+        out.extend(std::iter::repeat_n(0u8, rdlen as usize));
     }
     out
 }

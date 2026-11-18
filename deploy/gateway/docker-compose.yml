@@ -1,0 +1,24 @@
+# Run on each VPN node (Linux host with the wireguard kernel module, i.e. kernel >= 5.6).
+#   cp gateway.toml.example gateway.toml   # set gateway_id, control_plane_url,
+#                                          # private_key_file = "/etc/beyondvpn/keys/wg.key"
+#                                          # tls_* = "/etc/letsencrypt/live/<host>/..."
+#   BEYOND_GATEWAY_KEY=... docker compose -f deploy/gateway/docker-compose.yml up -d
+services:
+  gateway:
+    build:
+      context: ../../core
+      dockerfile: Dockerfile.gateway
+    restart: unless-stopped
+    network_mode: host
+    cap_add: [NET_ADMIN]
+    environment:
+      BEYOND_GATEWAY_KEY: ${BEYOND_GATEWAY_KEY:?set BEYOND_GATEWAY_KEY}
+      BEYOND_WG_KEY_FILE: /etc/beyondvpn/keys/wg.key
+      RUST_LOG: info
+    volumes:
+      - ./gateway.toml:/etc/beyondvpn/gateway.toml:ro
+      - ../blocklists:/etc/beyondvpn/blocklists:ro
+      - wgkeys:/etc/beyondvpn/keys
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+volumes:
+  wgkeys:

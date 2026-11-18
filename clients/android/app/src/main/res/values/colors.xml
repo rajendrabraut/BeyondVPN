@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand">#4F46E5</color>
+    <color name="ok">#0F9D58</color>
+    <color name="bad">#D93025</color>
+</resources>

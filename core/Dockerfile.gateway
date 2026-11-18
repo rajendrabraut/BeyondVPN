@@ -1,0 +1,13 @@
+# Build: docker build -f core/Dockerfile.gateway -t beyondvpn/gateway core/
+FROM rust:1-bookworm AS build
+WORKDIR /src
+COPY . .
+RUN cargo build --release -p beyond-gateway
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends wireguard-tools iproute2 nftables ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /src/target/release/beyond-gateway /usr/local/bin/beyond-gateway
+COPY docker/gateway-entrypoint.sh /usr/local/bin/gateway-entrypoint.sh
+RUN chmod +x /usr/local/bin/gateway-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/gateway-entrypoint.sh"]

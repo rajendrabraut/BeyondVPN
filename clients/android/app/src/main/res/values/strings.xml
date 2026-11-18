@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Beyond VPN</string>
+    <string name="server_url">Server URL (https://…)</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="totp">Authenticator code</string>
+    <string name="sign_in">Sign in</string>
+    <string name="sign_out">Sign out</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="fastest">⚡ Fastest server</string>
+    <string name="protected_state">Protected</string>
+    <string name="unprotected_state">Not protected</string>
+    <string name="allow_lan">Allow local network (printers, Chromecast)</string>
+    <string name="split_title">Split tunnelling: apps that bypass VPN</string>
+    <string name="kill_switch">Always-on VPN &amp; kill switch</string>
+    <string name="kill_switch_help">Opens Android VPN settings. Choose Beyond VPN, enable \"Always-on VPN\" and \"Block connections without VPN\" for a system-level kill switch.</string>
+    <string name="vpn_permission_denied">VPN permission is required to connect.</string>
+    <string name="stats_fmt">↓ %1$s   ↑ %2$s</string>
+    <string name="usage_fmt">This month: %1$s of %2$s</string>
+</resources>
