@@ -145,7 +145,7 @@ fn restrict(p: &Path, mode: u32) {
 #[cfg(not(unix))]
 fn restrict(_p: &Path, _mode: u32) {
     // On Windows the profile directory (%APPDATA%) is already ACL'd to the user;
-    // the service runs as LocalSystem. DPAPI wrapping is tracked in REMAINING.md.
+    // the service runs as LocalSystem. DPAPI wrapping is tracked in THINGS_REMAINING.md.
 }
 
 #[cfg(test)]

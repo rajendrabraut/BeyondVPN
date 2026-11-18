@@ -24,4 +24,4 @@ if (Get-Service BeyondVPNAgent -ErrorAction SilentlyContinue) { sc.exe stop Beyo
 sc.exe create BeyondVPNAgent binPath= "`"$dest\beyond-agent.exe`" serve --port 47800" start= auto DisplayName= "Beyond VPN Agent" | Out-Null
 sc.exe description BeyondVPNAgent "Beyond VPN tunnel manager (local API on 127.0.0.1:47800)" | Out-Null
 sc.exe failure BeyondVPNAgent reset= 86400 actions= restart/5000/restart/5000/restart/30000 | Out-Null
-Write-Host "Installed. Start with: sc.exe start BeyondVPNAgent (see REMAINING.md: native Windows service wrapper)."
+Write-Host "Installed. Start with: sc.exe start BeyondVPNAgent (see THINGS_REMAINING.md: native Windows service wrapper)."
