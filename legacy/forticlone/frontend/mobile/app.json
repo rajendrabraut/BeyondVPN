@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "FortiClone VPN",
+    "slug": "forticlone-vpn",
+    "version": "1.0.0",
+    "android": { "package": "com.forticlone.vpn" },
+    "plugins": [
+      "./plugins/withFortiVpnNative"
+    ]
+  }
+}
