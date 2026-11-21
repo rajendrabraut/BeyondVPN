@@ -1,0 +1,24 @@
+# Gateway config for running beyond-gateway inside a Pratik container.
+# The control plane is reached through the name "control-plane" (pass --add-host to `pratik run`).
+gateway_id = "pratik-1"
+control_plane_url = "http://control-plane:8000"
+interface = "wg0"
+listen_port = 51820
+private_key_file = "/etc/beyondvpn/wg.key"
+sync_interval_secs = 5
+capacity = 250
+
+[dns]
+enabled = true
+listen = "10.8.0.1:53"
+upstream = "https://cloudflare-dns.com/dns-query"
+blocklist_files = ["/etc/beyondvpn/blocklists/default.txt"]
+
+[proxy]
+enabled = false
+
+[multihop]
+enabled = false
+
+[stealth]
+enabled = false
