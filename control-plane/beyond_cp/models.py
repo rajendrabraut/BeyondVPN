@@ -67,6 +67,8 @@ class Server(Base):
     load: Mapped[float] = mapped_column(default=0.0)
     active_peers: Mapped[int] = mapped_column(Integer, default=0)
     version: Mapped[str] = mapped_column(String(32), default="")
+    stealth_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hop_public_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
@@ -86,6 +88,22 @@ class Peer(Base):
     preshared_key_enc: Mapped[str] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(Boolean, default=False)
     last_handshake: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # Multi-hop: route this peer's traffic out through another gateway.
+    exit_server_id: Mapped[str | None] = mapped_column(ForeignKey("servers.id", ondelete="SET NULL"), nullable=True)
+
+
+class HopLink(Base):
+    """Entry gateway -> exit gateway WireGuard uplink. The entry is a peer on the exit's wg0."""
+
+    __tablename__ = "hop_links"
+    __table_args__ = (UniqueConstraint("entry_server_id", "slot"), UniqueConstraint("exit_server_id", "tunnel_ip"))
+    entry_server_id: Mapped[str] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), primary_key=True)
+    exit_server_id: Mapped[str] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), primary_key=True)
+    # Small per-entry number: interface bhop<slot>, routing table 51000+slot on the entry gateway.
+    slot: Mapped[int] = mapped_column(Integer)
+    tunnel_ip: Mapped[str] = mapped_column(String(15))
+    preshared_key_enc: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -166,6 +184,36 @@ class RefreshToken(Base):
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class UserIdentity(Base):
+    """Link between a local user and an external SSO identity (OIDC issuer + subject)."""
+
+    __tablename__ = "user_identities"
+    __table_args__ = (UniqueConstraint("provider", "subject"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(40))
+    subject: Mapped[str] = mapped_column(String(255))
+    email: Mapped[str] = mapped_column(String(254), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class SsoLogin(Base):
+    """One SSO attempt: state/nonce/PKCE while at the IdP, then a one-time login code."""
+
+    __tablename__ = "sso_logins"
+    state: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(40))
+    nonce: Mapped[str] = mapped_column(String(64))
+    code_verifier: Mapped[str] = mapped_column(String(128))
+    return_to: Mapped[str] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    code_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Setting(Base):

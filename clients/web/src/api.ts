@@ -81,6 +81,36 @@ export async function login(email: string, password: string, totp?: string): Pro
   setRefresh(j.refresh_token);
 }
 
+export type SsoProvider = { id: string; name: string };
+
+export async function ssoProviders(): Promise<SsoProvider[]> {
+  const r = await raw("/auth/sso/providers", {}, false);
+  return r.ok ? r.json() : [];
+}
+
+/** Full-page navigation target that starts OIDC sign-in and comes back to this page. */
+export function ssoStartUrl(provider: string): string {
+  const back = `${location.origin}${location.pathname}`;
+  return `${BASE}/api/v1/auth/sso/${encodeURIComponent(provider)}/start?return_to=${encodeURIComponent(back)}`;
+}
+
+/** Read and remove `#sso_code=` / `#sso_error=` left by the SSO callback redirect. */
+export function takeSsoResult(): { code?: string; error?: string } {
+  const h = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const code = h.get("sso_code") ?? undefined;
+  const error = h.get("sso_error") ?? undefined;
+  if (code || error) history.replaceState(null, "", location.pathname + location.search);
+  return { code, error };
+}
+
+export async function ssoExchange(code: string, acceptLogging = false): Promise<void> {
+  const r = await raw("/auth/sso/exchange", { method: "POST", body: JSON.stringify({ code, accept_logging_policy: acceptLogging }) }, false);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new ApiError(r.status, j.detail ?? "single sign-on failed");
+  access = j.access_token;
+  setRefresh(j.refresh_token);
+}
+
 export async function resume(): Promise<boolean> {
   return tryRefresh();
 }

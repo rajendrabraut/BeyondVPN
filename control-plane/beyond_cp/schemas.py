@@ -100,6 +100,10 @@ class ServerOut(BaseModel):
     features: list[str]
     tier: str
     status: str
+    # TLS/443 stealth relay port when the gateway runs one (anti-blocking mode), else null.
+    stealth_port: int | None = None
+    # True when this server can be the entry of a multi-hop route.
+    multihop_entry: bool = False
 
 
 class ServerCreate(BaseModel):
@@ -142,6 +146,8 @@ class ServerPatch(BaseModel):
 class ConnectIn(BaseModel):
     device_id: str = Field(max_length=32)
     server_id: str = Field(max_length=40)
+    # Multi-hop: traffic enters at server_id and leaves the internet at exit_server_id.
+    exit_server_id: str | None = Field(default=None, max_length=40)
 
 
 class ConnectOut(BaseModel):
@@ -155,6 +161,8 @@ class ConnectOut(BaseModel):
     allowed_ips: list[str]
     persistent_keepalive: int
     policy: dict[str, Any]
+    stealth_port: int | None = None
+    exit_server_id: str | None = None
 
 
 class ProxyTokenIn(BaseModel):
@@ -178,11 +186,14 @@ class Heartbeat(BaseModel):
     active_peers: int = Field(ge=0)
     load: float = Field(ge=0, le=1)
     version: str = Field(max_length=32)
+    # Key of the gateway's multi-hop uplink interfaces (absent = multi-hop not supported).
+    hop_public_key: str | None = None
+    stealth_port: int | None = Field(default=None, ge=1, le=65535)
 
-    @field_validator("public_key")
+    @field_validator("public_key", "hop_public_key")
     @classmethod
-    def _key(cls, v: str) -> str:
-        if not WG_KEY.match(v):
+    def _key(cls, v: str | None) -> str | None:
+        if v is not None and not WG_KEY.match(v):
             raise ValueError("not a WireGuard public key")
         return v
 

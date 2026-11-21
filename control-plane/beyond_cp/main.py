@@ -14,8 +14,8 @@ from sqlalchemy import delete, select
 from . import __version__, audit
 from .config import get_settings
 from .db import Base, engine, init_engine, session
-from .models import DnsLog, ProxyLog, RefreshToken, User, utcnow
-from .routers import admin, auth, gateway, me, vpn
+from .models import DnsLog, ProxyLog, RefreshToken, SsoLogin, User, utcnow
+from .routers import admin, auth, gateway, me, sso, vpn
 from .security import hash_password, keys, password_ok
 
 log = logging.getLogger("beyond_cp")
@@ -29,6 +29,7 @@ def purge_expired(retention_days: int) -> dict[str, int]:
         n_dns = db.execute(delete(DnsLog).where(DnsLog.ts < cutoff)).rowcount
         n_web = db.execute(delete(ProxyLog).where(ProxyLog.ts < cutoff)).rowcount
         n_rt = db.execute(delete(RefreshToken).where(RefreshToken.expires_at < utcnow())).rowcount
+        db.execute(delete(SsoLogin).where(SsoLogin.created_at < utcnow() - timedelta(hours=1)))
         db.commit()
         if n_dns or n_web:
             audit.record(db, "system", "retention.purge", "", "", {"dns": n_dns, "web": n_web, "days": retention_days})
@@ -106,6 +107,6 @@ def create_app() -> FastAPI:
     def signing_key():
         return {"alg": "EdDSA", "public_key": keys().public_b64}
 
-    for r in (auth.router, vpn.router, me.router, gateway.router, admin.router):
+    for r in (auth.router, sso.router, vpn.router, me.router, gateway.router, admin.router):
         app.include_router(r)
     return app

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { api, ApiError, del, login, logout, post, resume } from "./api";
+import { api, ApiError, del, login, logout, post, resume, SsoProvider, ssoExchange, ssoProviders, ssoStartUrl, takeSsoResult } from "./api";
 import { buildWgConfig, ConnectResponse, flag, formatBytes, generateWgKeypair } from "./lib";
 import { AdminPages, ADMIN_PAGES } from "./Admin";
 
@@ -93,6 +93,10 @@ export function App() {
   );
 }
 
+const LOGGING_NOTICE =
+  "I understand this service records my data usage and the domains/websites I visit while connected, for security and compliance. " +
+  "Logs are kept for a limited retention period and I can view or delete mine at any time.";
+
 function Auth({ onDone }: { onDone: () => Promise<void> }) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -103,6 +107,53 @@ function Auth({ onDone }: { onDone: () => Promise<void> }) {
   const [consent, setConsent] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [providers, setProviders] = useState<SsoProvider[]>([]);
+  const [ssoCode, setSsoCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    ssoProviders().then(setProviders).catch(() => undefined);
+    const { code, error } = takeSsoResult();
+    if (error) setErr(`Single sign-on failed: ${error}`);
+    if (code) {
+      ssoExchange(code)
+        .then(onDone)
+        .catch((x) => {
+          if (x instanceof ApiError && x.status === 428) setSsoCode(code);
+          else setErr(x instanceof Error ? x.message : String(x));
+        });
+    }
+  }, [onDone]);
+
+  const finishSso = async () => {
+    if (!ssoCode) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      await ssoExchange(ssoCode, true);
+      await onDone();
+    } catch (x) {
+      setErr(x instanceof Error ? x.message : String(x));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (ssoCode) {
+    return (
+      <div className="auth card">
+        <div className="logo" style={{ padding: 0 }}>Beyond<span>VPN</span></div>
+        <h1>One more step</h1>
+        <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+          <input type="checkbox" style={{ width: "auto", marginTop: 4 }} checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+          <span>{LOGGING_NOTICE}</span>
+        </label>
+        <Err e={err} />
+        <div className="row" style={{ marginTop: 14 }}>
+          <button className="btn" disabled={busy || !consent} onClick={finishSso}>Continue</button>
+        </div>
+      </div>
+    );
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,10 +197,7 @@ function Auth({ onDone }: { onDone: () => Promise<void> }) {
       {mode === "register" && (
         <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
           <input type="checkbox" style={{ width: "auto", marginTop: 4 }} checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-          <span>
-            I understand this service records my data usage and the domains/websites I visit while connected, for security and compliance.
-            Logs are kept for a limited retention period and I can view or delete mine at any time.
-          </span>
+          <span>{LOGGING_NOTICE}</span>
         </label>
       )}
       <Err e={err} />
@@ -159,6 +207,16 @@ function Auth({ onDone }: { onDone: () => Promise<void> }) {
           {mode === "login" ? "Create account" : "I have an account"}
         </button>
       </div>
+      {mode === "login" && providers.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Or use your organisation account</div>
+          {providers.map((p) => (
+            <a key={p.id} className="btn ghost" style={{ display: "block", textAlign: "center", marginTop: 6 }} href={ssoStartUrl(p.id)}>
+              Sign in with {p.name}
+            </a>
+          ))}
+        </div>
+      )}
     </form>
   );
 }

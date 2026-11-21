@@ -6,7 +6,7 @@ import ipaddress
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import Peer, Server
+from .models import HopLink, Peer, Server
 
 
 class PoolExhausted(Exception):
@@ -22,6 +22,7 @@ def allocate(db: Session, server: Server) -> str:
     """Lowest free host address; .1 is reserved for the gateway (DNS resolver)."""
     net = ipaddress.ip_network(server.tunnel_cidr, strict=False)
     used = set(db.execute(select(Peer.tunnel_ip).where(Peer.server_id == server.id)).scalars())
+    used |= set(db.execute(select(HopLink.tunnel_ip).where(HopLink.exit_server_id == server.id)).scalars())
     reserved = {gateway_ip(server)}
     for host in net.hosts():
         ip = str(host)

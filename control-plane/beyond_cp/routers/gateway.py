@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .. import policy
 from ..db import get_db
 from ..deps import gateway
-from ..models import Device, DnsLog, Peer, ProxyLog, Server, UsageDaily, User, VpnSession, utcnow
+from ..models import Device, DnsLog, HopLink, Peer, ProxyLog, Server, UsageDaily, User, VpnSession, utcnow
 from ..schemas import DnsLogBatch, Heartbeat, ProxyLogBatch, UsageReport
 from ..security import decrypt, keys
 from .vpn import month_usage
@@ -53,10 +53,32 @@ def peers(srv: Server = Depends(gateway), db: Session = Depends(get_db)):
         if user.data_cap_bytes is not None and month_usage(db, user.id) >= user.data_cap_bytes:
             over_cap.add(user.id)
             continue
-        out.append({"public_key": dev.public_key, "preshared_key": decrypt(peer.preshared_key_enc), "tunnel_ip": peer.tunnel_ip, "user_id": user.id, "device_id": dev.id})
+        out.append(
+            {"public_key": dev.public_key, "preshared_key": decrypt(peer.preshared_key_enc), "tunnel_ip": peer.tunnel_ip, "user_id": user.id, "device_id": dev.id, "exit_server_id": peer.exit_server_id}
+        )
     revoked = set(db.execute(select(User.id).where(User.is_active.is_(False))).scalars()) | over_cap
     pol = policy.get_all(db)
+
+    # Multi-hop, this gateway as ENTRY: uplinks to exits that active peers use.
+    wanted_exits = {p["exit_server_id"] for p in out if p["exit_server_id"]}
+    hops = []
+    for link, exit_ in db.execute(select(HopLink, Server).join(Server, Server.id == HopLink.exit_server_id).where(HopLink.entry_server_id == srv.id)).all():
+        if link.exit_server_id in wanted_exits and exit_.public_key and exit_.enabled:
+            hops.append(
+                {"exit_server_id": exit_.id, "slot": link.slot, "endpoint": f"{exit_.hostname}:{exit_.wg_port}", "public_key": exit_.public_key, "preshared_key": decrypt(link.preshared_key_enc), "address": link.tunnel_ip}
+            )
+    routable = {h["exit_server_id"] for h in hops}
+    for p in out:  # never route a peer into an uplink that is not configured
+        if p["exit_server_id"] not in routable:
+            p["exit_server_id"] = None
+    # Multi-hop, this gateway as EXIT: entry gateways appear as ordinary peers on wg0.
+    hop_peers = []
+    for link, entry in db.execute(select(HopLink, Server).join(Server, Server.id == HopLink.entry_server_id).where(HopLink.exit_server_id == srv.id)).all():
+        if entry.hop_public_key and entry.enabled:
+            hop_peers.append({"public_key": entry.hop_public_key, "preshared_key": decrypt(link.preshared_key_enc), "tunnel_ip": link.tunnel_ip, "user_id": "", "device_id": f"hop:{entry.id}"})
     return {
+        "hops": hops,
+        "hop_peers": hop_peers,
         "peers": out,
         "signing_public_key": keys().public_b64,
         "blocked_domains": pol["blocked_domains"],
@@ -72,6 +94,8 @@ def heartbeat(body: Heartbeat, srv: Server = Depends(gateway), db: Session = Dep
     srv.active_peers = body.active_peers
     srv.load = body.load
     srv.version = body.version
+    srv.hop_public_key = body.hop_public_key
+    srv.stealth_port = body.stealth_port
     srv.last_heartbeat_at = utcnow()
     db.commit()
     return {"ok": True}

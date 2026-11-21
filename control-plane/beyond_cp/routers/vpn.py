@@ -11,7 +11,7 @@ from .. import audit, ipam, policy
 from ..config import get_settings
 from ..db import get_db
 from ..deps import client_ip, current_user
-from ..models import Device, Peer, Server, UsageDaily, User, VpnSession, utcnow
+from ..models import Device, HopLink, Peer, Server, UsageDaily, User, VpnSession, utcnow
 from ..schemas import ConnectIn, ConnectOut, DeviceIn, DeviceOut, ProxyTokenIn, ProxyTokenOut, ServerOut
 from ..security import decrypt, encrypt, issue_token
 from ..wgkeys import generate_psk
@@ -42,7 +42,26 @@ def server_out(s: Server) -> ServerOut:
         features=s.features or [],
         tier=s.tier,
         status=server_status(s),
+        stealth_port=s.stealth_port,
+        multihop_entry=s.hop_public_key is not None,
     )
+
+
+def ensure_hop(db: Session, entry: Server, exit_: Server) -> HopLink:
+    """Create (once) the entry->exit uplink: a tunnel IP on the exit and a slot on the entry."""
+    link = db.get(HopLink, (entry.id, exit_.id))
+    if link is not None:
+        return link
+    used = set(db.execute(select(HopLink.slot).where(HopLink.entry_server_id == entry.id)).scalars())
+    slot = next(i for i in range(1, 10_000) if i not in used)
+    try:
+        ip = ipam.allocate(db, exit_)
+    except ipam.PoolExhausted:
+        raise HTTPException(503, "exit server full, pick another exit")
+    link = HopLink(entry_server_id=entry.id, exit_server_id=exit_.id, slot=slot, tunnel_ip=ip, preshared_key_enc=encrypt(generate_psk()))
+    db.add(link)
+    db.flush()
+    return link
 
 
 def month_usage(db: Session, user_id: str) -> int:
@@ -129,6 +148,18 @@ def connect(body: ConnectIn, request: Request, user: User = Depends(current_user
     if server_status(srv) != "online":
         raise HTTPException(503, "server not available")
     pol = _check_access(db, user, dev)
+    exit_srv = None
+    if body.exit_server_id:
+        exit_srv = db.get(Server, body.exit_server_id)
+        if exit_srv is None:
+            raise HTTPException(404, "exit server not found")
+        if exit_srv.id == srv.id:
+            raise HTTPException(422, "exit server must differ from the entry server")
+        if server_status(exit_srv) != "online":
+            raise HTTPException(503, "exit server not available")
+        if srv.hop_public_key is None:
+            raise HTTPException(409, "entry server does not support multi-hop")
+        ensure_hop(db, srv, exit_srv)
 
     peer = db.execute(select(Peer).where(Peer.device_id == dev.id, Peer.server_id == srv.id)).scalar_one_or_none()
     if peer is None:
@@ -139,6 +170,7 @@ def connect(body: ConnectIn, request: Request, user: User = Depends(current_user
         peer = Peer(device_id=dev.id, server_id=srv.id, tunnel_ip=ip, preshared_key_enc=encrypt(generate_psk()))
         db.add(peer)
     peer.active = True
+    peer.exit_server_id = exit_srv.id if exit_srv else None
     # One active WireGuard session per device.
     db.execute(
         update(VpnSession).where(VpnSession.device_id == dev.id, VpnSession.kind == "wireguard", VpnSession.ended_at.is_(None)).values(ended_at=utcnow())
@@ -148,7 +180,7 @@ def connect(body: ConnectIn, request: Request, user: User = Depends(current_user
     db.add(sess)
     dev.last_seen_at = utcnow()
     db.commit()
-    audit.record(db, user.id, "vpn.connect", srv.id, client_ip(request), {"device": dev.id, "tunnel_ip": peer.tunnel_ip})
+    audit.record(db, user.id, "vpn.connect", srv.id, client_ip(request), {"device": dev.id, "tunnel_ip": peer.tunnel_ip, "exit": peer.exit_server_id})
     return ConnectOut(
         session_id=sess.id,
         address=f"{peer.tunnel_ip}/32",
@@ -160,6 +192,8 @@ def connect(body: ConnectIn, request: Request, user: User = Depends(current_user
         allowed_ips=["0.0.0.0/0", "::/0"],
         persistent_keepalive=25,
         policy={"kill_switch_required": pol["kill_switch_required"], "split_tunnel_allowed": pol["split_tunnel_allowed"]},
+        stealth_port=srv.stealth_port,
+        exit_server_id=peer.exit_server_id,
     )
 
 
