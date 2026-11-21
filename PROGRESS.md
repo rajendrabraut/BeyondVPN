@@ -1,25 +1,28 @@
 # Beyond VPN — Progress
 
-*Status as of 2026-11-18, branch `beyond-v2`.*
+*Status as of 2026-11-21, branch `beyond-v2`.*
 
 ## 1. Component status
 
 | Component | Built | Tests | Verified how | Not yet verified |
 |---|---|---|---|---|
-| `beyond-common` (Rust) | ✅ | 27 ✅ | `cargo test`, clippy `-D warnings` | — |
-| `beyond-gateway` (Rust) | ✅ | 11 ✅ | Unit + in-process proxy/DNS tests; e2e in dry-run | Kernel WireGuard reconcile, nftables, TLS cert loading on Linux |
-| `beyond-agent` (Rust) | ✅ | 6 ✅ | Unit + e2e (login, register, connect, status, disconnect) in dry-run | Real WireGuard-NT / wg-quick tunnel bring-up |
-| Control plane (Python) | ✅ | 30 ✅ | pytest (auth, MFA, RBAC, IPAM, policy, logging modes, retention, erase, audit tamper) + e2e | PostgreSQL backend, multi-replica |
-| Web portal (React) | ✅ | 5 ✅ | vitest, `tsc` strict, Vite production build | Manual UI walkthrough in a browser |
+| `beyond-common` (Rust) | ✅ | 28 ✅ | `cargo test`, clippy `-D warnings` | — |
+| `beyond-stealth` (Rust, new) | ✅ | 4 ✅ | WireGuard-over-TLS relay: framing, probe 404, UDP→TCP→UDP round trip | Over the internet behind a UDP-blocking firewall |
+| `beyond-gateway` (Rust) | ✅ | 14 ✅ | Unit + in-process proxy/DNS tests; multi-hop rule/link planner; e2e in dry-run | Kernel WireGuard reconcile, nftables, `bhop` uplinks + policy routing, TLS cert loading on Linux |
+| `beyond-agent` (Rust) | ✅ | 6 ✅ | Unit + e2e (login, register, connect, status, disconnect) in dry-run | Real tunnel through a gateway; stealth relay with a real cert |
+| WireGuard-NT on Windows | ✅ installed | manual ✅ | Two tunnel services on this PC hand-shook over 127.0.0.1 (split routes only) | Full tunnel to a real gateway |
+| Control plane (Python) | ✅ | 44 ✅ | pytest (auth, MFA, **OIDC SSO vs fake IdP**, RBAC, IPAM, **multi-hop**, policy, logging modes, retention, erase, audit tamper) + e2e | PostgreSQL backend, multi-replica, real IdP |
+| Web portal (React) | ✅ | 5 ✅ | vitest, `tsc` strict, Vite production build; SSO buttons + consent step | Manual UI walkthrough in a browser |
 | Browser extension | ✅ | 6 ✅ | `node --test`, syntax check, packaged for Chrome + Firefox | Loaded in a real browser against a TLS gateway |
-| Desktop UI (Electron) | ✅ | 4 ✅ | Agent client tests against fake agent; syntax check | Running the Electron window |
-| Android app (Kotlin) | ✅ | 7 ✅ | JUnit; `assembleDebug` → `app-debug.apk` (18.1 MB) | Install on device; tunnel up |
+| Desktop UI (Electron) | ✅ | 4 ✅ | **Window opened** and driven over DevTools: sign-in → Connect → "Protected" against `tests/e2e/demo_stack.py` (dry-run tunnel); screenshots in `docs/screenshots/` | Real tunnel; installer |
+| Android app (Kotlin) | ✅ | 7 ✅ | JUnit; `assembleDebug`; **installed and launched on an API 36 emulator** (`docs/screenshots/android-home.png`) | Physical phone; tunnel up against a gateway |
+| iOS app (Swift, new) | source only | 5 written | — | Not compiled: needs a Mac with Xcode (clients/ios/README.md) |
 | Cross-language e2e | ✅ | 1 scenario ✅ | `tests/e2e/run_e2e.py` (12 checks) | — |
-| Deployment (Docker/installer) | ✅ written | — | Reviewed | `docker compose up`, installer on Ubuntu |
-| CI (GitHub Actions) | ✅ written | — | — | First run on GitHub |
-| Docs (6 required + 3 extra) | ✅ | — | — | — |
+| Deployment (Docker/installer) | ✅ written | — | Reviewed; runbook `docs/DEPLOY_RUNBOOK.md` | `docker compose up`, installer on Ubuntu (no server yet) |
+| CI (GitHub Actions) | ✅ | 7 jobs ✅ | Green on PR #5 (Rust on Linux/Windows/macOS, Python, e2e, web/extension/desktop, Android) | — |
+| Docs | ✅ | — | — | — |
 
-**Totals:** 96 unit/integration tests + 1 multi-process e2e scenario, all passing locally on Windows 11.
+**Totals:** 118 unit/integration tests + 1 multi-process e2e scenario, all passing locally on Windows 11 (iOS tests not run).
 
 ## 2. End-to-end scenario output (latest run)
 

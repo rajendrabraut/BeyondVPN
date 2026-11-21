@@ -4,18 +4,20 @@ A self-hostable VPN platform for **Windows, macOS, Linux, Android, iOS (via Wire
 
 | Component | Path | Language | Status |
 |---|---|---|---|
-| Shared crypto/config library | `core/crates/beyond-common` | Rust | ✅ 27 tests |
-| Gateway (peer sync, metering, filtering DNS, authenticated HTTPS proxy) | `core/crates/beyond-gateway` | Rust | ✅ 11 tests |
-| Desktop agent (CLI + local daemon, WireGuard-NT / wg-quick) | `core/crates/beyond-agent` | Rust | ✅ 6 tests |
-| Control plane (auth, MFA, devices, IPAM, logs, admin, audit) | `control-plane/` | Python (FastAPI) | ✅ 30 tests |
+| Shared crypto/config library | `core/crates/beyond-common` | Rust | ✅ 28 tests |
+| Stealth transport (WireGuard over TLS/443, anti-blocking) | `core/crates/beyond-stealth` | Rust | ✅ 4 tests |
+| Gateway (peer sync, metering, filtering DNS, authenticated HTTPS proxy, multi-hop uplinks, stealth relay) | `core/crates/beyond-gateway` | Rust | ✅ 14 tests |
+| Desktop agent (CLI + local daemon, WireGuard-NT / wg-quick, stealth, multi-hop) | `core/crates/beyond-agent` | Rust | ✅ 6 tests |
+| Control plane (auth, MFA, OIDC SSO, devices, IPAM, multi-hop, logs, admin, audit) | `control-plane/` | Python (FastAPI) | ✅ 44 tests |
 | Web portal + admin console | `clients/web/` | React + TypeScript | ✅ 5 tests, builds |
 | Browser extension (Chrome, Edge, Firefox) | `clients/extension/` | JavaScript (MV3) | ✅ 6 tests |
-| Desktop app UI | `clients/desktop/` | Electron | ✅ 4 tests |
-| Android app | `clients/android/` | Kotlin | ✅ 7 tests, APK builds |
+| Desktop app UI | `clients/desktop/` | Electron | ✅ 4 tests, runs against the demo stack |
+| Android app | `clients/android/` | Kotlin | ✅ 7 tests, runs on emulator |
+| iOS app | `clients/ios/` | Swift (SwiftUI + NetworkExtension) | source only, not yet compiled (needs a Mac) |
 | Cross-language end-to-end test | `tests/e2e/run_e2e.py` | Python | ✅ passes |
-| Deployment | `deploy/`, `core/Dockerfile.gateway` | Docker / shell | written, not yet run on a real server |
+| Deployment | `deploy/`, `core/Dockerfile.gateway` | Docker / shell | written, not yet run on a real server ([runbook](docs/DEPLOY_RUNBOOK.md)) |
 
-**Total: 96 automated tests + 1 end-to-end scenario, all passing** (see [PROGRESS.md](PROGRESS.md)).
+**Total: 118 automated tests + 1 end-to-end scenario, all passing** (see [PROGRESS.md](PROGRESS.md)).
 
 ## Project documents
 
@@ -30,6 +32,8 @@ A self-hostable VPN platform for **Windows, macOS, Linux, Android, iOS (via Wire
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture, flows and feature comparison with Forti / Proton |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | Technical, operational, legal and cost feasibility |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Deployment and administration runbook |
+| [docs/DEPLOY_RUNBOOK.md](docs/DEPLOY_RUNBOOK.md) | Step-by-step first real deployment with a client test checklist |
+| [docs/SSO.md](docs/SSO.md) | OpenID Connect single sign-on setup (Entra ID, Google, Okta, Keycloak) |
 
 ## How it works (one paragraph)
 

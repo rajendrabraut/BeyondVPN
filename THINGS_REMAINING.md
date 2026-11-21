@@ -6,7 +6,7 @@ Prioritised backlog. **P0** = required before any real users; **P1** = before pu
 
 | # | Item | Why | Effort |
 |---|---|---|---|
-| 1 | Run a real deployment: control plane via `deploy/docker-compose.yml`, 2 gateways via `install-gateway.sh`, real tunnels from Windows, macOS, Linux, Android, iOS (WireGuard app) and the extension | Only dry-run/e2e verified so far; kernel WireGuard, nftables and Caddy paths are untested on real hosts | 2–3 d |
+| 1 | Run a real deployment by following `docs/DEPLOY_RUNBOOK.md`: control plane via `deploy/docker-compose.yml`, 2 gateways via `install-gateway.sh`, real tunnels from Windows, macOS, Linux, Android, iOS and the extension, plus multi-hop and stealth checks | Needs Linux servers (none available yet). Verified so far (2026-11-20): CI green on GitHub; WireGuard-NT tunnels on Windows hand-shake over loopback; Android APK runs on an API 36 emulator; Electron app signs in and connects against the local demo stack (`tests/e2e/demo_stack.py`, dry-run tunnel). Kernel WireGuard, nftables, multi-hop routing, stealth over the internet and Caddy are untested on real hosts | 1 d |
 | 2 | Windows service wrapper for `beyond-agent` (Windows SCM API via `windows-service` crate, or WinSW) | `sc.exe create` on a console binary will not report status to SCM correctly | 1 d |
 | 3 | Desktop installer bundling: WireGuard dependency check/installer, agent service, Electron app (`electron-builder`), code signing | Users currently install pieces manually | 3 d |
 | 4 | Linux agent token permissions: `beyond-agent serve` should create the token with group ownership itself instead of `ExecStartPost` chmod | Race at first start | 0.5 d |
@@ -19,10 +19,10 @@ Prioritised backlog. **P0** = required before any real users; **P1** = before pu
 
 | # | Item |
 |---|---|
-| 9 | SSO: OIDC (Azure AD, Google Workspace, Okta) and SAML 2.0 for enterprise tenants (Forti EMS parity) |
-| 10 | Native macOS app (NetworkExtension + WireGuardKit) and native iOS app (currently: official WireGuard app + portal QR) |
-| 11 | Stealth/obfuscated transport for censored networks (WireGuard over TCP/TLS 443, e.g. `udp2raw`/`wstunnel`, or AmneziaWG) — Proton "Stealth" parity |
-| 12 | Secure Core / multi-hop (entry gateway → exit gateway chaining) |
+| 9 | SSO: **OIDC done** (control plane + portal, docs/SSO.md, tested against a fake IdP). Left: real-IdP trial (Entra ID / Google / Okta), native SAML 2.0, SSO sign-in in desktop/Android/iOS apps (`beyondvpn://sso` redirect is already allowed), SCIM provisioning |
+| 10 | iOS: **SwiftUI + NetworkExtension source written** (`clients/ios`), not yet compiled (needs a Mac + Xcode + Apple team). Left: first build, TestFlight, stealth + SSO in the app. Native macOS app still open |
+| 11 | Stealth: **done** for desktop (`beyond-stealth` crate: WireGuard in TLS/443, nginx-like 404 to probes; gateway `[stealth]`, agent `set --stealth`). Left: Android/iOS (embed the relay via UniFFI), real-network trial behind a UDP-blocking firewall, optional domain fronting / AmneziaWG |
+| 12 | Multi-hop: **done** in control plane, gateway (`bhop<N>` uplinks + policy routing) and desktop agent/app (`set --exit-server`). Left: verify on real Linux gateways (runbook §4), exit picker in Android, portal QR configs with an exit |
 | 13 | IPv6 inside the tunnel (ULA per gateway) — currently IPv4 tunnel addresses only (IPv6 is routed into the tunnel and dropped, preventing leaks) |
 | 14 | Auto-connect on untrusted Wi-Fi (SSID trust list) on desktop and Android |
 | 15 | Domain-based split tunnelling on desktop (resolve-and-route) — routes/apps exist, domains only in the extension |
@@ -52,3 +52,5 @@ Prioritised backlog. **P0** = required before any real users; **P1** = before pu
 3. Byte counters are accurate to the WireGuard reporting interval (30 s); usage of a session that ends within 30 s of a gateway restart can be under-counted.
 4. Kill switch on Windows comes from WireGuard-NT and only applies to full-tunnel configs; enabling "allow LAN"/excluded routes disables WireGuard-NT's automatic block rules.
 5. Android system-level kill switch must be enabled by the user in system settings (Android does not allow apps to set it).
+6. Stealth mode on Windows excludes the gateway's IP from AllowedIPs (so the TLS relay does not loop into the tunnel); that also turns off WireGuard-NT's built-in kill switch while stealth is on.
+7. New schema columns (servers.stealth_port, servers.hop_public_key, peers.exit_server_id, hop_links, user_identities, sso_logins) are created only on a fresh database until Alembic migrations exist (P0 #6).
