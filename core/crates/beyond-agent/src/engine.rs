@@ -11,6 +11,7 @@ pub struct Engine {
     pub store: Store,
     pub backend: Box<dyn Backend>,
     lock: Mutex<()>,
+    relay: std::sync::Mutex<Option<beyond_stealth::ClientRelay>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -29,7 +30,7 @@ pub struct Status {
 
 impl Engine {
     pub fn new(store: Store, backend: Box<dyn Backend>) -> Self {
-        Engine { store, backend, lock: Mutex::new(()) }
+        Engine { store, backend, lock: Mutex::new(()), relay: std::sync::Mutex::new(None) }
     }
 
     fn api(&self, st: &AgentState) -> anyhow::Result<Api> {
@@ -119,13 +120,41 @@ impl Engine {
             Some(id) => servers.iter().find(|s| s.id == id || s.name.eq_ignore_ascii_case(&id)).cloned().ok_or_else(|| anyhow::anyhow!("unknown server {id}"))?,
             None => self.fastest(&servers).await.ok_or_else(|| anyhow::anyhow!("no servers available"))?,
         };
+        let exit = match st.settings.exit_server.as_deref().filter(|e| !e.is_empty()) {
+            Some(e) => Some(servers.iter().find(|s| s.id == e || s.name.eq_ignore_ascii_case(e)).map(|s| s.id.clone()).ok_or_else(|| anyhow::anyhow!("unknown exit server {e}"))?),
+            None => None,
+        }
+        .filter(|e| *e != target.id);
         let sid = target.id.clone();
         let dev = device.clone();
+        let ex = exit.clone();
         let resp = self.authed(move |api, t| {
-            let (dev, sid) = (dev.clone(), sid.clone());
-            async move { api.connect(&t, &dev, &sid).await }
+            let (dev, sid, ex) = (dev.clone(), sid.clone(), ex.clone());
+            async move { api.connect(&t, &dev, &sid, ex.as_deref()).await }
         })
         .await?;
+        self.stop_relay();
+        let mut endpoint = resp.endpoint.clone();
+        let mut relay_excludes = Vec::new();
+        if st.settings.stealth {
+            let port = resp.stealth_port.ok_or_else(|| anyhow::anyhow!("{} does not offer stealth mode; pick another server or turn stealth off", target.name))?;
+            // Dial the gateway over IPv4 and keep that address outside the tunnel,
+            // otherwise the relay's own TLS connection would loop into WireGuard.
+            let addr = tokio::net::lookup_host((target.hostname.as_str(), port))
+                .await?
+                .find(|a| a.is_ipv4())
+                .ok_or_else(|| anyhow::anyhow!("{} has no IPv4 address for stealth mode", target.hostname))?;
+            relay_excludes.push(format!("{}/32", addr.ip()));
+            let relay = beyond_stealth::ClientRelay::start(beyond_stealth::ClientConfig {
+                host: target.hostname.clone(),
+                port,
+                addr: Some(addr),
+                insecure_plaintext: std::env::var("BEYOND_STEALTH_PLAINTEXT").as_deref() == Ok("1"),
+            })
+            .await?;
+            endpoint = relay.local_addr.to_string();
+            *self.relay.lock().unwrap() = Some(relay);
+        }
         let private_key = self.store.private_key().ok_or_else(|| anyhow::anyhow!("device key missing"))?;
         let cfg = TunnelConfig {
             private_key,
@@ -134,22 +163,27 @@ impl Engine {
             mtu: resp.mtu,
             peer_public_key: resp.peer_public_key.clone(),
             preshared_key: resp.preshared_key.clone(),
-            endpoint: resp.endpoint.clone(),
+            endpoint,
             allowed_ips: resp.allowed_ips.clone(),
             persistent_keepalive: resp.persistent_keepalive,
         };
         let s = &st.settings;
         let split_ok = resp.policy.split_tunnel_allowed;
+        let mut exclude_routes = if split_ok { s.exclude_routes.clone() } else { vec![] };
+        exclude_routes.extend(relay_excludes);
         let opts = ClientOptions {
             kill_switch: s.kill_switch || resp.policy.kill_switch_required,
             allow_lan: s.allow_lan && split_ok,
-            exclude_routes: if split_ok { s.exclude_routes.clone() } else { vec![] },
+            exclude_routes,
             platform: tunnel::platform_name().into(),
         };
         let text = cfg.render(&opts)?;
         let path = self.store.tunnel_conf_path();
         crate::store::write_private(&path, text.as_bytes())?;
         let up = self.backend.up(&path);
+        if up.is_err() {
+            self.stop_relay();
+        }
         // The private key must not linger in a readable file longer than needed
         // on platforms where the service has already imported it.
         if cfg!(windows) && up.is_ok() {
@@ -157,10 +191,25 @@ impl Engine {
         }
         up?;
         st.session_id = Some(resp.session_id);
-        st.connected_server = Some(target.name.clone());
+        let label = match resp.exit_server_id.as_deref().and_then(|e| servers.iter().find(|s| s.id == e)) {
+            Some(x) => format!("{} via {}", x.name, target.name),
+            None => target.name.clone(),
+        };
+        st.connected_server = Some(label.clone());
         st.connected_at = Some(beyond_common::now_unix());
         self.store.save(&st)?;
-        Ok(target.name)
+        Ok(label)
+    }
+
+    fn stop_relay(&self) {
+        if let Some(r) = self.relay.lock().unwrap().take() {
+            r.stop();
+        }
+    }
+
+    /// True while a stealth relay is running in this process (CLI must stay alive for it).
+    pub fn relay_active(&self) -> bool {
+        self.relay.lock().unwrap().is_some()
     }
 
     pub async fn disconnect(&self) -> anyhow::Result<()> {
@@ -168,6 +217,7 @@ impl Engine {
         let mut st = self.store.load();
         let path = self.store.tunnel_conf_path();
         let down = self.backend.down(&path);
+        self.stop_relay();
         if let Some(sid) = st.session_id.take() {
             let r = self.authed(move |api, t| {
                 let sid = sid.clone();

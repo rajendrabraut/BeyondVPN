@@ -29,6 +29,9 @@
     <label class="check"><input type="checkbox" id="kill_switch" /> Kill switch (block internet if VPN drops)</label>
     <label class="check"><input type="checkbox" id="allow_lan" /> Allow local network (printers, NAS)</label>
     <label class="check"><input type="checkbox" id="auto_connect" /> Connect automatically at startup</label>
+    <label class="check"><input type="checkbox" id="stealth" /> Stealth mode (looks like HTTPS; use where VPNs are blocked)</label>
+    <label for="exit_server">Multi-hop — leave the internet through</label>
+    <select id="exit_server"><option value="">Off (single hop)</option></select>
     <label for="exclude">Split tunnelling — bypass these networks (CIDR, comma separated)</label>
     <input id="exclude" placeholder="203.0.113.0/24" />
     <button id="save">Save</button>

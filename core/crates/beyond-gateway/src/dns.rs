@@ -119,7 +119,7 @@ mod tests {
         let st = State::new("gw".into(), bl);
         st.peers_by_ip.write().unwrap().insert(
             "10.8.0.2".into(),
-            PeerSpec { public_key: "k".into(), preshared_key: None, tunnel_ip: "10.8.0.2".into(), user_id: "u1".into(), device_id: "d1".into() },
+            PeerSpec { public_key: "k".into(), preshared_key: None, tunnel_ip: "10.8.0.2".into(), user_id: "u1".into(), device_id: "d1".into(), exit_server_id: None },
         );
         // Upstream that would fail: blocked names must never reach it.
         let up = Upstream::Udp("127.0.0.1:9".parse().unwrap());

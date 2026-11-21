@@ -34,6 +34,9 @@ services:
       # Set both in production so keys survive volume loss; keep them in a secret manager.
       BEYOND_SIGNING_KEY: ${BEYOND_SIGNING_KEY:-}
       BEYOND_DATA_KEY: ${BEYOND_DATA_KEY:-}
+      # SSO (docs/SSO.md). JSON list of OIDC providers; secrets via BEYOND_OIDC_SECRET_<ID>.
+      BEYOND_OIDC_PROVIDERS: ${BEYOND_OIDC_PROVIDERS:-}
+      BEYOND_OIDC_SECRET_CORP: ${BEYOND_OIDC_SECRET_CORP:-}
     volumes: [cpdata:/data]
 
   caddy:

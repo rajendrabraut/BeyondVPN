@@ -81,7 +81,7 @@ mod tests {
     use super::*;
 
     fn peer(k: &str) -> PeerSpec {
-        PeerSpec { public_key: k.into(), preshared_key: None, tunnel_ip: "10.8.0.2".into(), user_id: "u".into(), device_id: "d".into() }
+        PeerSpec { public_key: k.into(), preshared_key: None, tunnel_ip: "10.8.0.2".into(), user_id: "u".into(), device_id: "d".into(), exit_server_id: None }
     }
 
     #[test]

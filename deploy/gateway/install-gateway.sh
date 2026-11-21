@@ -63,3 +63,4 @@ UNIT
 systemctl daemon-reload
 systemctl enable --now beyond-gateway
 echo "Gateway $GW_ID installed. Open UDP 51820 and TCP 8443 (+80 for certbot renewals) in the firewall."
+echo "If [stealth] is enabled in /etc/beyondvpn/gateway.toml, also open TCP 443."

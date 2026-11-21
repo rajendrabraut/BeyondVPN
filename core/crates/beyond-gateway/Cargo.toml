@@ -8,6 +8,7 @@ authors.workspace = true
 
 [dependencies]
 beyond-common = { path = "../beyond-common" }
+beyond-stealth = { path = "../beyond-stealth" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

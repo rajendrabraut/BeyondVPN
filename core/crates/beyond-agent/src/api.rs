@@ -64,6 +64,10 @@ pub struct ConnectResponse {
     #[serde(default)]
     pub persistent_keepalive: u16,
     pub policy: ConnectPolicy,
+    #[serde(default)]
+    pub stealth_port: Option<u16>,
+    #[serde(default)]
+    pub exit_server_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -144,8 +148,8 @@ impl Api {
         self.call(reqwest::Method::POST, "/devices", Some(token), Some(json!({"name": name, "platform": platform, "public_key": public_key, "posture": posture}))).await
     }
 
-    pub async fn connect(&self, token: &str, device_id: &str, server_id: &str) -> Result<ConnectResponse, ApiError> {
-        self.call(reqwest::Method::POST, "/sessions/connect", Some(token), Some(json!({"device_id": device_id, "server_id": server_id}))).await
+    pub async fn connect(&self, token: &str, device_id: &str, server_id: &str, exit_server_id: Option<&str>) -> Result<ConnectResponse, ApiError> {
+        self.call(reqwest::Method::POST, "/sessions/connect", Some(token), Some(json!({"device_id": device_id, "server_id": server_id, "exit_server_id": exit_server_id}))).await
     }
 
     pub async fn disconnect(&self, token: &str, session_id: &str) -> Result<serde_json::Value, ApiError> {

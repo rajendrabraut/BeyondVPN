@@ -12,11 +12,34 @@ pub struct PeerSpec {
     pub tunnel_ip: String,
     pub user_id: String,
     pub device_id: String,
+    /// Multi-hop: send this peer's traffic out through the uplink to this exit server.
+    #[serde(default)]
+    pub exit_server_id: Option<String>,
+}
+
+/// Multi-hop uplink from this (entry) gateway to an exit gateway.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HopSpec {
+    pub exit_server_id: String,
+    /// Interface `bhop<slot>`, routing table `51000 + slot`.
+    pub slot: u16,
+    pub endpoint: String,
+    pub public_key: String,
+    #[serde(default)]
+    pub preshared_key: Option<String>,
+    /// This gateway's tunnel IP on the exit's wg0.
+    pub address: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PeersResponse {
     pub peers: Vec<PeerSpec>,
+    /// Uplinks to configure when this gateway is a multi-hop entry.
+    #[serde(default)]
+    pub hops: Vec<HopSpec>,
+    /// Entry gateways that use this gateway as exit (installed on wg0 like normal peers).
+    #[serde(default)]
+    pub hop_peers: Vec<PeerSpec>,
     /// Control-plane Ed25519 public key (base64) used to verify proxy tokens.
     #[serde(default)]
     pub signing_public_key: Option<String>,
@@ -96,6 +119,10 @@ pub struct Heartbeat {
     pub active_peers: u32,
     pub load: f32,
     pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hop_public_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stealth_port: Option<u16>,
 }
 
 #[cfg(test)]
@@ -107,5 +134,12 @@ mod tests {
         let r: PeersResponse = serde_json::from_str(r#"{"peers":[]}"#).unwrap();
         assert_eq!(r.logging_mode, "full");
         assert!(r.blocked_domains.is_empty());
+        assert!(r.hops.is_empty() && r.hop_peers.is_empty());
+    }
+
+    #[test]
+    fn peer_exit_is_optional() {
+        let p: PeerSpec = serde_json::from_str(r#"{"public_key":"k","tunnel_ip":"10.8.0.2","user_id":"u","device_id":"d"}"#).unwrap();
+        assert_eq!(p.exit_server_id, None);
     }
 }

@@ -66,6 +66,8 @@ class AgentClient {
       auto_connect: !!s.auto_connect,
       exclude_routes: Array.isArray(s.exclude_routes) ? s.exclude_routes.map(String) : [],
       preferred_server: s.preferred_server ? String(s.preferred_server) : null,
+      stealth: !!s.stealth,
+      exit_server: s.exit_server ? String(s.exit_server) : null,
     };
     return this.request("POST", "/v1/settings", clean);
   }

@@ -232,8 +232,13 @@ pub async fn handle<S: AsyncRead + AsyncWrite + Unpin>(state: Arc<State>, cfg: A
 }
 
 fn tls_acceptor(cfg: &ProxyConfig) -> anyhow::Result<Option<tokio_rustls::TlsAcceptor>> {
+    tls_from_files(cfg.tls_cert.as_deref(), cfg.tls_key.as_deref())
+}
+
+/// TLS acceptor from PEM files; `None` when either path is missing.
+pub fn tls_from_files(cert: Option<&std::path::Path>, key: Option<&std::path::Path>) -> anyhow::Result<Option<tokio_rustls::TlsAcceptor>> {
     use tokio_rustls::rustls;
-    let (Some(cert), Some(key)) = (&cfg.tls_cert, &cfg.tls_key) else {
+    let (Some(cert), Some(key)) = (cert, key) else {
         return Ok(None);
     };
     let certs = rustls_pemfile::certs(&mut std::io::BufReader::new(std::fs::File::open(cert)?)).collect::<Result<Vec<_>, _>>()?;

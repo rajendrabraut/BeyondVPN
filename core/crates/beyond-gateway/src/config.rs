@@ -28,6 +28,55 @@ pub struct GatewayConfig {
     pub dns: DnsConfig,
     #[serde(default)]
     pub proxy: ProxyConfig,
+    #[serde(default)]
+    pub multihop: MultihopConfig,
+    #[serde(default)]
+    pub stealth: StealthConfig,
+}
+
+/// Multi-hop uplinks to exit gateways (see hop.rs). Linux only.
+#[derive(Debug, Clone, Deserialize)]
+pub struct MultihopConfig {
+    #[serde(default = "t")]
+    pub enabled: bool,
+    #[serde(default = "d_hop_key")]
+    pub key_file: PathBuf,
+}
+
+impl Default for MultihopConfig {
+    fn default() -> Self {
+        MultihopConfig { enabled: true, key_file: d_hop_key() }
+    }
+}
+
+/// Anti-blocking mode: WireGuard carried over TLS (see beyond-stealth).
+#[derive(Debug, Clone, Deserialize)]
+pub struct StealthConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "d_stealth_listen")]
+    pub listen: String,
+    /// Port clients connect to (when a load balancer maps it differently). Defaults to the listen port.
+    #[serde(default)]
+    pub public_port: Option<u16>,
+    /// PEM cert/key; default to the proxy's. Plain TCP only when both are absent (tests / TLS LB in front).
+    #[serde(default)]
+    pub tls_cert: Option<PathBuf>,
+    #[serde(default)]
+    pub tls_key: Option<PathBuf>,
+}
+
+impl Default for StealthConfig {
+    fn default() -> Self {
+        StealthConfig { enabled: false, listen: d_stealth_listen(), public_port: None, tls_cert: None, tls_key: None }
+    }
+}
+
+fn d_hop_key() -> PathBuf {
+    "/etc/beyondvpn/hop.key".into()
+}
+fn d_stealth_listen() -> String {
+    "0.0.0.0:443".into()
 }
 
 #[derive(Debug, Clone, Deserialize)]

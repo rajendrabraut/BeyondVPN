@@ -20,6 +20,12 @@ pub struct Settings {
     pub auto_connect: bool,
     #[serde(default)]
     pub preferred_server: Option<String>,
+    /// Anti-blocking mode: carry WireGuard over TLS/443 (server must offer it).
+    #[serde(default)]
+    pub stealth: bool,
+    /// Multi-hop: leave the internet through this server (entry = the connected server).
+    #[serde(default)]
+    pub exit_server: Option<String>,
 }
 
 fn yes() -> bool {
@@ -29,7 +35,7 @@ fn yes() -> bool {
 impl Default for Settings {
     /// Secure by default: kill switch on, LAN blocked, no split tunnel.
     fn default() -> Self {
-        Settings { kill_switch: true, allow_lan: false, exclude_routes: vec![], auto_connect: false, preferred_server: None }
+        Settings { kill_switch: true, allow_lan: false, exclude_routes: vec![], auto_connect: false, preferred_server: None, stealth: false, exit_server: None }
     }
 }
 

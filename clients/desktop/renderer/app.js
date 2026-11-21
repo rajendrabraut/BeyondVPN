@@ -41,6 +41,7 @@ async function refresh() {
     $("allow_lan").checked = s.settings.allow_lan;
     $("auto_connect").checked = s.settings.auto_connect;
     $("exclude").value = s.settings.exclude_routes.join(", ");
+    $("stealth").checked = !!s.settings.stealth;
   }
   if (Date.now() - lastServersLoad > 60000) {
     lastServersLoad = Date.now();
@@ -55,6 +56,14 @@ async function refresh() {
         sel.add(o);
       }
       sel.value = cur;
+      const exit = $("exit_server");
+      exit.replaceChildren(new Option("Off (single hop)", ""));
+      for (const v of list) {
+        const o = new Option(`${v.country} · ${v.name}`, v.id);
+        o.disabled = v.status !== "online";
+        exit.add(o);
+      }
+      exit.value = s.settings.exit_server || "";
     } catch (e) {
       err(e);
     }
@@ -98,6 +107,8 @@ $("save").addEventListener("click", (e) =>
       auto_connect: $("auto_connect").checked,
       exclude_routes: $("exclude").value.split(",").map((x) => x.trim()).filter(Boolean),
       preferred_server: $("server").value || null,
+      stealth: $("stealth").checked,
+      exit_server: $("exit_server").value || null,
     }),
   ),
 );

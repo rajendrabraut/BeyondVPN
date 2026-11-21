@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/beyond-common", "crates/beyond-gateway", "crates/beyond-agent"]
+members = ["crates/beyond-common", "crates/beyond-stealth", "crates/beyond-gateway", "crates/beyond-agent"]
 
 [workspace.package]
 version = "0.2.0"
@@ -28,6 +28,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 axum = "0.7"
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "logging", "tls12"] }
 rustls-pemfile = "2"
+webpki-roots = "0.26"
 dirs = "5"
 
 [profile.release]

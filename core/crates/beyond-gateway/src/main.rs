@@ -3,6 +3,7 @@
 mod config;
 mod cp;
 mod dns;
+mod hop;
 mod proxy;
 mod state;
 mod wg;
@@ -64,7 +65,15 @@ fn public_key(cfg: &config::GatewayConfig) -> anyhow::Result<String> {
     }
 }
 
-async fn sync_once(st: &State, cp: &cp::ControlPlane, wg: &wg::Wg, cfg: &config::GatewayConfig, pubkey: &str) -> anyhow::Result<()> {
+fn stealth_port(cfg: &config::GatewayConfig) -> Option<u16> {
+    if !cfg.stealth.enabled {
+        return None;
+    }
+    cfg.stealth.public_port.or_else(|| cfg.stealth.listen.rsplit_once(':').and_then(|(_, p)| p.parse().ok()))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn sync_once(st: &State, cp: &cp::ControlPlane, wg: &wg::Wg, hops: Option<&hop::Hops>, hop_pub: Option<&str>, cfg: &config::GatewayConfig, pubkey: &str) -> anyhow::Result<()> {
     let resp = cp.peers().await?;
     if let Some(k) = &resp.signing_public_key {
         *st.signing_key.write().unwrap() = Some(beyond_common::token::parse_public_key(k).map_err(|e| anyhow::anyhow!("{e}"))?);
@@ -80,8 +89,16 @@ async fn sync_once(st: &State, cp: &cp::ControlPlane, wg: &wg::Wg, cfg: &config:
     *st.peers_by_ip.write().unwrap() = by_ip;
 
     let current: HashSet<String> = wg.dump()?.map(|d| d.peers.into_iter().map(|p| p.public_key).collect()).unwrap_or_default();
-    let plan = wg::plan(&current, &resp.peers);
+    // Entry gateways that use us as their multi-hop exit are ordinary wg0 peers.
+    let mut desired = resp.peers.clone();
+    desired.extend(resp.hop_peers.iter().cloned());
+    let plan = wg::plan(&current, &desired);
     wg.apply(&plan)?;
+    if let Some(h) = hops {
+        if let Err(e) = h.sync(&resp.peers, &resp.hops) {
+            tracing::warn!(error = %e, "multi-hop sync failed");
+        }
+    }
     let n = resp.peers.len() as u32;
     cp.post(
         "heartbeat",
@@ -91,6 +108,8 @@ async fn sync_once(st: &State, cp: &cp::ControlPlane, wg: &wg::Wg, cfg: &config:
             active_peers: n,
             load: (n as f32 / cfg.capacity.max(1) as f32).min(1.0),
             version: env!("CARGO_PKG_VERSION").into(),
+            hop_public_key: hop_pub.map(Into::into),
+            stealth_port: stealth_port(cfg),
         },
     )
     .await?;
@@ -104,6 +123,18 @@ async fn run(cfg: config::GatewayConfig) -> anyhow::Result<()> {
     let wg = Arc::new(wg::Wg { iface: cfg.interface.clone(), dry_run: cfg.dry_run });
     let pubkey = public_key(&cfg)?;
     tracing::info!(gateway = %cfg.gateway_id, %pubkey, dry_run = cfg.dry_run, "starting");
+    let hops = (cfg.multihop.enabled && (cfg.dry_run || cfg!(target_os = "linux"))).then(|| hop::Hops { dry_run: cfg.dry_run, key_file: cfg.multihop.key_file.clone() });
+    let hop_pub = match &hops {
+        Some(h) => match h.public_key() {
+            Ok(k) => Some(k),
+            Err(e) => {
+                tracing::warn!(error = %e, "multi-hop disabled: uplink key unavailable");
+                None
+            }
+        },
+        None => None,
+    };
+    let hops = if hop_pub.is_some() { hops } else { None };
 
     // Peer/policy sync + heartbeat.
     {
@@ -112,7 +143,7 @@ async fn run(cfg: config::GatewayConfig) -> anyhow::Result<()> {
             let mut tick = tokio::time::interval(Duration::from_secs(cfg.sync_interval_secs.max(2)));
             loop {
                 tick.tick().await;
-                if let Err(e) = sync_once(&st, &cp, &wg, &cfg, &pubkey).await {
+                if let Err(e) = sync_once(&st, &cp, &wg, hops.as_ref(), hop_pub.as_deref(), &cfg, &pubkey).await {
                     tracing::warn!(error = %e, "sync failed");
                 }
             }
@@ -173,6 +204,19 @@ async fn run(cfg: config::GatewayConfig) -> anyhow::Result<()> {
     }
     if cfg.proxy.enabled {
         tasks.push(tokio::spawn(proxy::serve(st.clone(), cfg.proxy.clone())));
+    }
+    if cfg.stealth.enabled {
+        let s = &cfg.stealth;
+        let cert = s.tls_cert.as_deref().or(cfg.proxy.tls_cert.as_deref());
+        let key = s.tls_key.as_deref().or(cfg.proxy.tls_key.as_deref());
+        let tls = proxy::tls_from_files(cert, key)?;
+        if tls.is_none() {
+            tracing::warn!("stealth relay running WITHOUT TLS: only behind a TLS terminator or for tests");
+        }
+        let listener = tokio::net::TcpListener::bind(&s.listen).await?;
+        let wg_target: std::net::SocketAddr = format!("127.0.0.1:{}", cfg.listen_port).parse()?;
+        tracing::info!(listen = %s.listen, tls = tls.is_some(), "stealth relay listening");
+        tasks.push(tokio::spawn(beyond_stealth::serve(listener, tls, wg_target)));
     }
     tokio::select! {
         _ = tokio::signal::ctrl_c() => tracing::info!("shutting down"),

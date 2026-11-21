@@ -59,6 +59,12 @@ enum Cmd {
         /// Comma separated IPv4 CIDRs to bypass the tunnel ("" clears).
         #[arg(long)]
         exclude: Option<String>,
+        /// Anti-blocking mode: carry WireGuard over TLS/443.
+        #[arg(long)]
+        stealth: Option<bool>,
+        /// Multi-hop exit server id or name ("" turns multi-hop off).
+        #[arg(long)]
+        exit_server: Option<String>,
     },
     /// Run the local control API for the desktop UI.
     Serve {
@@ -116,6 +122,13 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Connect { server } => {
             let name = engine.connect(server).await?;
             println!("Connected to {name}.");
+            if engine.relay_active() {
+                // The stealth relay lives in this process; the daemon (`serve`) keeps it for the desktop app.
+                println!("Stealth relay running. Press Ctrl+C to disconnect.");
+                tokio::signal::ctrl_c().await?;
+                engine.disconnect().await?;
+                println!("Disconnected.");
+            }
         }
         Cmd::Disconnect => {
             engine.disconnect().await?;
@@ -132,8 +145,14 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Usage => {
             println!("{}", serde_json::to_string_pretty(&engine.usage().await?)?);
         }
-        Cmd::Set { kill_switch, allow_lan, auto_connect, exclude } => {
+        Cmd::Set { kill_switch, allow_lan, auto_connect, exclude, stealth, exit_server } => {
             let mut s = engine.status().settings;
+            if let Some(v) = stealth {
+                s.stealth = v;
+            }
+            if let Some(v) = exit_server {
+                s.exit_server = Some(v.trim().to_string()).filter(|x| !x.is_empty());
+            }
             if let Some(v) = kill_switch {
                 s.kill_switch = v;
             }

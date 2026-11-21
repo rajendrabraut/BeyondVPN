@@ -59,7 +59,7 @@ test("talks to a fake agent with bearer auth and sanitised settings", async () =
     assert.equal(seen[0].auth, `Bearer ${TOKEN}`);
     assert.equal(seen[0].host, `127.0.0.1:${port}`);
     const settings = JSON.parse(seen[1].body);
-    assert.deepEqual(Object.keys(settings).sort(), ["allow_lan", "auto_connect", "exclude_routes", "kill_switch", "preferred_server"]);
+    assert.deepEqual(Object.keys(settings).sort(), ["allow_lan", "auto_connect", "exclude_routes", "exit_server", "kill_switch", "preferred_server", "stealth"]);
     assert.equal(settings.kill_switch, true);
     assert.deepEqual(settings.exclude_routes, ["1", "10.0.0.0/8"]);
   } finally {

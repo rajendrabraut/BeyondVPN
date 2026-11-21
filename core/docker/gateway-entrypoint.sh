@@ -33,6 +33,8 @@ table inet beyond {
     iifname "wg0" oifname "wg0" drop
     iifname "wg0" ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 } drop
     iifname "wg0" oifname "$WAN" accept
+    # Multi-hop: clients routed to an exit gateway leave through bhop<N> uplinks.
+    iifname "wg0" oifname "bhop*" accept
   }
   chain input {
     type filter hook input priority 0; policy accept;
@@ -47,6 +49,7 @@ table ip beyond_nat {
   chain postrouting {
     type nat hook postrouting priority 100;
     ip saddr $CIDR oifname "$WAN" masquerade
+    ip saddr $CIDR oifname "bhop*" masquerade
   }
 }
 EOF
