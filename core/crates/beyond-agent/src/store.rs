@@ -123,14 +123,12 @@ impl Store {
 
     /// Lock the state directory down for the machine-wide service (Windows): only SYSTEM and
     /// Administrators; the token file additionally readable by interactively signed-in users.
+    #[cfg(windows)]
     pub fn harden_for_service(&self) -> anyhow::Result<()> {
-        #[cfg(windows)]
-        {
-            acl::restrict_dir(&self.dir)?;
-            let t = self.dir.join("agent.token");
-            if t.exists() {
-                acl::token_file(&t)?;
-            }
+        acl::restrict_dir(&self.dir)?;
+        let t = self.dir.join("agent.token");
+        if t.exists() {
+            acl::token_file(&t)?;
         }
         Ok(())
     }
@@ -171,6 +169,7 @@ impl Store {
 }
 
 /// Machine-wide state directory used by the Windows service.
+#[cfg(windows)]
 pub fn service_dir() -> PathBuf {
     PathBuf::from(std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".into())).join("BeyondVPN")
 }
