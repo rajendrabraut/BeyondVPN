@@ -22,6 +22,11 @@ Completion = verified criteria / total criteria (8 tasks, equal weight).
 
 ## Checkpoints (UTC; owner display Asia/Kathmandu UTC+05:45)
 
+### 2026-11-21T19:10Z (2026-11-22 00:55 NPT) — worker: main session, generation 1
+- R5 verified: cargo audit 0.23 (1555 advisories, 237 crates) → 0 vulnerabilities; 1 unmaintained warning RUSTSEC-2025-0134 rustls-pemfile (no fix release; replace with rustls-pki-types PemObject in a follow-up with a TLS-loading test). pip-audit, npm audit clean.
+- Rust workspace tests 54 passed; e2e passed; first CI run on 203d127 failed: Linux clippy dead-code on Windows-only helpers → fixed in 6f3b3df (cfg(windows)); CI re-running (run 44936789458).
+- Completion: R1–R6 verified (6/8 = 75%); R7, R8 pending CI.
+
 ### 2026-11-21T18:20Z (2026-11-22 00:05 NPT) — worker: main session, generation 1
 - R1 verified: pytest 48→52 incl. models==migrations, idempotent, legacy stamp keeps data, forward-only.
 - R2 verified: shared-limit, window rollover, outage fallback tests (pytest 52 passed).
