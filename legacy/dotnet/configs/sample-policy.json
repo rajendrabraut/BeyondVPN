@@ -1,0 +1,7 @@
+{
+  "AllowedCidrs": ["10.99.0.0/24", "192.168.10.0/24"],
+  "AllowedPorts": ["53/udp", "443/tcp"],
+  "FullTunnel": false,
+  "DnsServers": ["10.99.0.1"],
+  "Signature": "signed-by-admin-placeholder"
+}

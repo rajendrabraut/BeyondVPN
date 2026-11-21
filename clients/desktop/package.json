@@ -1,0 +1,27 @@
+{
+  "name": "beyond-vpn-desktop",
+  "productName": "Beyond VPN",
+  "version": "0.0.0+1",
+  "description": "Beyond VPN desktop app (UI for the beyond-agent service)",
+  "main": "src/main.js",
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/agentClient.test.js",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/agentClient.js && node --check renderer/app.js",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "app.beyondvpn.desktop",
+    "productName": "Beyond VPN",
+    "files": ["src/**", "renderer/**"],
+    "extraResources": [{ "from": "../../core/target/release/", "to": "bin", "filter": ["beyond-agent", "beyond-agent.exe"] }],
+    "win": { "target": "nsis", "requestedExecutionLevel": "asInvoker" },
+    "mac": { "target": "dmg", "category": "public.app-category.utilities" },
+    "linux": { "target": ["AppImage", "deb"], "category": "Network" }
+  }
+}

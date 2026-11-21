@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main, beyond-v2]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: clippy }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: core }
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - run: cargo build --workspace
+
+  control-plane:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: control-plane
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - run: pip install ".[test]"
+      - run: pytest -q
+
+  e2e:
+    needs: [rust, control-plane]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: core }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - run: cargo build --workspace
+        working-directory: core
+      - run: pip install ./control-plane[test] uvicorn
+      - run: python tests/e2e/run_e2e.py
+
+  web-and-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci || npm install
+        working-directory: clients/web
+      - run: npm test && npm run build
+        working-directory: clients/web
+      - run: npm test && npm run check
+        working-directory: clients/extension
+      - run: npm test && npm run check
+        working-directory: clients/desktop
+
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      # ubuntu-latest ships the Android SDK with ANDROID_HOME set; the
+      # setup-android action's sdkmanager step was failing, so it is not used.
+      - run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+      - run: chmod +x gradlew && ./gradlew --no-daemon testDebugUnitTest assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beyondvpn-android-debug
+          path: clients/android/app/build/outputs/apk/debug/*.apk

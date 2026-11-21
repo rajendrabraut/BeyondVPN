@@ -1,0 +1,36 @@
+# /etc/beyondvpn/gateway.toml — one per VPN node.
+gateway_id = "in-mum-1"                       # id created in the admin console / CLI
+control_plane_url = "https://vpn.example.com" # must be https in production
+# gateway_key is read from the BEYOND_GATEWAY_KEY environment variable.
+interface = "wg0"
+listen_port = 51820
+private_key_file = "/etc/beyondvpn/wg.key"
+sync_interval_secs = 10
+capacity = 250
+
+[dns]
+enabled = true
+listen = "10.8.0.1:53"
+# Encrypted upstream (DNS-over-HTTPS). Alternatives: https://dns.quad9.net/dns-query, udp://1.1.1.1:53
+upstream = "https://cloudflare-dns.com/dns-query"
+blocklist_files = ["/etc/beyondvpn/blocklists/default.txt"]
+
+[proxy]
+enabled = true
+listen = "0.0.0.0:8443"
+tls_cert = "/etc/beyondvpn/tls/fullchain.pem"
+tls_key = "/etc/beyondvpn/tls/privkey.pem"
+allowed_ports = [80, 443, 8080, 8443]
+allow_private_destinations = false
+
+# Multi-hop: this gateway can be an ENTRY that forwards chosen users to an exit gateway
+# (bhop<N> WireGuard uplinks + policy routing). Exits need no extra config.
+[multihop]
+enabled = true
+key_file = "/etc/beyondvpn/hop.key"   # created on first start
+
+# Stealth / anti-blocking mode: WireGuard carried inside TLS on 443 for networks that block VPNs.
+# Uses the [proxy] certificate unless tls_cert/tls_key are set. Open TCP 443 when enabling.
+[stealth]
+enabled = false
+listen = "0.0.0.0:443"

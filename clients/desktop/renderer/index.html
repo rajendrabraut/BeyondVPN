@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:" />
+  <title>Beyond VPN</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header><b>Beyond</b><span>VPN</span></header>
+
+  <section id="login" hidden>
+    <h1>Sign in</h1>
+    <label for="api">Server URL</label><input id="api" placeholder="https://vpn.example.com" />
+    <label for="email">Email</label><input id="email" type="email" />
+    <label for="pw">Password</label><input id="pw" type="password" />
+    <label for="totp">Authenticator code (if enabled)</label><input id="totp" inputmode="numeric" />
+    <button id="signin" class="primary">Sign in</button>
+  </section>
+
+  <section id="main" hidden>
+    <div id="shield" class="shield off"><div class="ring"></div><div id="state">Not protected</div><div id="where" class="sub"></div></div>
+    <label for="server">Location</label>
+    <select id="server"><option value="">⚡ Fastest server</option></select>
+    <button id="toggle" class="primary big">Connect</button>
+    <div class="stats"><div><span class="sub">Downloaded</span><b id="rx">—</b></div><div><span class="sub">Uploaded</span><b id="tx">—</b></div></div>
+
+    <h2>Protection</h2>
+    <label class="check"><input type="checkbox" id="kill_switch" /> Kill switch (block internet if VPN drops)</label>
+    <label class="check"><input type="checkbox" id="allow_lan" /> Allow local network (printers, NAS)</label>
+    <label class="check"><input type="checkbox" id="auto_connect" /> Connect automatically at startup</label>
+    <label class="check"><input type="checkbox" id="stealth" /> Stealth mode (looks like HTTPS; use where VPNs are blocked)</label>
+    <label for="exit_server">Multi-hop — leave the internet through</label>
+    <select id="exit_server"><option value="">Off (single hop)</option></select>
+    <label for="exclude">Split tunnelling — bypass these networks (CIDR, comma separated)</label>
+    <input id="exclude" placeholder="203.0.113.0/24" />
+    <button id="save">Save</button>
+    <p class="sub">Settings apply on the next connection.</p>
+    <button id="logout" class="link">Sign out <span id="who"></span></button>
+  </section>
+
+  <div id="err" class="err" role="alert"></div>
+  <script src="app.js"></script>
+</body>
+</html>

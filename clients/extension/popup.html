@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Beyond VPN</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header><b>Beyond</b><span>VPN</span></header>
+
+  <section id="login" hidden>
+    <label for="api">Server</label>
+    <input id="api" placeholder="https://vpn.example.com" autocomplete="url" />
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username" />
+    <label for="pw">Password</label>
+    <input id="pw" type="password" autocomplete="current-password" />
+    <div id="mfa" hidden>
+      <label for="totp">Authenticator code</label>
+      <input id="totp" inputmode="numeric" autocomplete="one-time-code" />
+    </div>
+    <button id="signin" class="primary">Sign in</button>
+  </section>
+
+  <section id="main" hidden>
+    <div id="status" class="status off">
+      <div class="dot"></div>
+      <div><div id="statusText">Not protected</div><div id="statusSub" class="sub"></div></div>
+    </div>
+    <label for="server">Location</label>
+    <select id="server"><option value="">⚡ Fastest</option></select>
+    <button id="toggle" class="primary">Connect</button>
+    <div id="usage" class="sub"></div>
+    <details>
+      <summary>Settings</summary>
+      <label class="check"><input type="checkbox" id="allowLan" /> Allow LAN access</label>
+      <label class="check"><input type="checkbox" id="blockWebRtc" /> Block WebRTC IP leaks</label>
+      <label for="bypass">Bypass these sites (one per line)</label>
+      <textarea id="bypass" rows="3" placeholder="bank.example.com"></textarea>
+      <button id="save">Save settings</button>
+    </details>
+    <p class="sub">Only browser traffic is protected. Use the desktop or Android app to protect all apps.</p>
+    <button id="logout" class="link">Sign out <span id="who"></span></button>
+  </section>
+
+  <div id="err" class="err" role="alert"></div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

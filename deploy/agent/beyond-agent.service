@@ -1,0 +1,20 @@
+# Linux desktop: sudo cp beyond-agent.service /etc/systemd/system/ && sudo systemctl enable --now beyond-agent
+# The local API token is written to /var/lib/beyondvpn/agent.token (group "beyondvpn" may read it);
+# add desktop users to that group so the Beyond VPN app can talk to the service.
+[Unit]
+Description=Beyond VPN agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Environment=BEYOND_AGENT_DIR=/var/lib/beyondvpn
+ExecStartPre=/bin/sh -c 'getent group beyondvpn >/dev/null || groupadd --system beyondvpn; install -d -m 0750 -g beyondvpn /var/lib/beyondvpn'
+# The agent writes agent.token itself as 0640 root:beyondvpn (no post-start chmod race).
+ExecStart=/usr/local/bin/beyond-agent serve --port 47800
+Restart=on-failure
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,31 @@
+# Rust
+core/target/
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+control-plane/data/
+*.db
+# Node
+node_modules/
+dist/
+clients/desktop/out/
+# Android
+clients/android/.gradle/
+clients/android/build/
+clients/android/app/build/
+clients/android/local.properties
+*.apk
+*.aab
+# Secrets
+*.key
+*.pem
+.env
+!deploy/.env.example
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

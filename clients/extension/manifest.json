@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Beyond VPN",
+  "short_name": "BeyondVPN",
+  "version": "0.0.0.1",
+  "description": "Encrypt and route your browser traffic through Beyond VPN gateways, with tracker blocking and WebRTC leak protection.",
+  "minimum_chrome_version": "110",
+  "action": { "default_popup": "popup.html", "default_title": "Beyond VPN" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["proxy", "storage", "alarms", "webRequest", "webRequestAuthProvider", "privacy"],
+  "host_permissions": ["<all_urls>"],
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'" }
+}

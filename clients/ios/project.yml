@@ -1,0 +1,62 @@
+# XcodeGen spec — on a Mac:  brew install xcodegen && cd clients/ios && xcodegen generate && open BeyondVPN.xcodeproj
+# Set DEVELOPMENT_TEAM below (or in Xcode) and enable the Network Extension + App Groups capabilities
+# for both targets in your Apple Developer account. See README.md.
+name: BeyondVPN
+options:
+  bundleIdPrefix: app.beyondvpn
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    DEVELOPMENT_TEAM: ""          # your Team ID
+    MARKETING_VERSION: "0.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  WireGuardKit:
+    url: https://git.zx2c4.com/wireguard-apple
+    exactVersion: 1.0.15-26
+targets:
+  BeyondVPN:
+    type: application
+    platform: iOS
+    sources: [BeyondVPN, Shared]
+    entitlements:
+      path: BeyondVPN/BeyondVPN.entitlements
+    info:
+      path: BeyondVPN/Info.plist
+      properties:
+        CFBundleDisplayName: Beyond VPN
+        UILaunchScreen: {}
+        ITSAppUsesNonExemptEncryption: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.beyondvpn.ios
+    dependencies:
+      - target: PacketTunnel
+        embed: true
+  PacketTunnel:
+    type: app-extension
+    platform: iOS
+    sources: [PacketTunnel, Shared]
+    entitlements:
+      path: PacketTunnel/PacketTunnel.entitlements
+    info:
+      path: PacketTunnel/Info.plist
+      properties:
+        CFBundleDisplayName: Beyond VPN Tunnel
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.beyondvpn.ios.tunnel
+    dependencies:
+      - package: WireGuardKit
+  BeyondVPNTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: BeyondVPN

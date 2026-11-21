@@ -1,0 +1,20 @@
+:root { --bg: #f6f7fb; --panel: #fff; --ink: #141824; --muted: #5d6475; --line: #e2e5ee; --brand: #4f46e5; --ok: #0f9d58; --bad: #d93025; color-scheme: light dark; }
+@media (prefers-color-scheme: dark) { :root { --bg: #0e1118; --panel: #161a24; --ink: #e8eaf2; --muted: #9aa1b3; --line: #262b38; --brand: #818cf8; } }
+body { margin: 0; padding: 20px; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+header { font-size: 20px; margin-bottom: 14px; } header span { color: var(--brand); font-weight: 800; }
+h1 { font-size: 20px; } h2 { font-size: 14px; margin: 22px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+label.check { display: flex; gap: 8px; color: var(--ink); font-size: 14px; } label.check input { width: auto; }
+input, select { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; }
+button { margin-top: 12px; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; cursor: pointer; }
+button.primary { width: 100%; background: var(--brand); border: 0; color: #fff; font-weight: 600; }
+button.big { padding: 14px; font-size: 16px; }
+button.link { border: 0; background: none; color: var(--muted); padding: 0; margin-top: 18px; }
+button:disabled { opacity: .6; }
+.shield { text-align: center; padding: 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.shield .ring { width: 74px; height: 74px; border-radius: 50%; margin: 0 auto 10px; border: 6px solid var(--bad); }
+.shield.on .ring { border-color: var(--ok); box-shadow: 0 0 0 8px color-mix(in srgb, var(--ok) 15%, transparent); }
+#state { font-size: 18px; font-weight: 700; }
+.sub { color: var(--muted); font-size: 12px; }
+.stats { display: flex; gap: 10px; margin-top: 12px; } .stats > div { flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; }
+.err { color: var(--bad); margin-top: 10px; }

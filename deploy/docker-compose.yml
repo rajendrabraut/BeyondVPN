@@ -1,0 +1,59 @@
+# Control plane stack: PostgreSQL + FastAPI control plane + web portal behind Caddy (automatic HTTPS).
+#   cp deploy/.env.example deploy/.env  && edit it
+#   (cd clients/web && npm ci && npm run build)
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
+name: beyondvpn
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: beyond
+      POSTGRES_USER: beyond
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U beyond"]
+      interval: 10s
+
+  control-plane:
+    build: ../control-plane
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      BEYOND_DATABASE_URL: postgresql+psycopg://beyond:${POSTGRES_PASSWORD}@db/beyond
+      BEYOND_PUBLIC_URL: https://${BEYOND_DOMAIN}
+      BEYOND_CORS_ORIGINS: https://${BEYOND_DOMAIN}
+      BEYOND_TRUST_PROXY_HEADERS: "true"
+      BEYOND_LOG_RETENTION_DAYS: ${BEYOND_LOG_RETENTION_DAYS:-30}
+      BEYOND_ALLOW_REGISTRATION: ${BEYOND_ALLOW_REGISTRATION:-true}
+      BEYOND_ADMIN_EMAIL: ${BEYOND_ADMIN_EMAIL}
+      BEYOND_ADMIN_PASSWORD: ${BEYOND_ADMIN_PASSWORD}
+      # Set both in production so keys survive volume loss; keep them in a secret manager.
+      BEYOND_SIGNING_KEY: ${BEYOND_SIGNING_KEY:-}
+      BEYOND_DATA_KEY: ${BEYOND_DATA_KEY:-}
+      # SSO (docs/SSO.md). JSON list of OIDC providers; secrets via BEYOND_OIDC_SECRET_<ID>.
+      BEYOND_OIDC_PROVIDERS: ${BEYOND_OIDC_PROVIDERS:-}
+      BEYOND_OIDC_SECRET_CORP: ${BEYOND_OIDC_SECRET_CORP:-}
+      # Set when running more than one control-plane replica (shared rate limits), e.g. redis://redis:6379/0
+      BEYOND_REDIS_URL: ${BEYOND_REDIS_URL:-}
+    volumes: [cpdata:/data]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [control-plane]
+    ports: ["80:80", "443:443"]
+    environment:
+      BEYOND_DOMAIN: ${BEYOND_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../clients/web/dist:/srv/web:ro
+      - caddydata:/data
+
+volumes:
+  dbdata:
+  cpdata:
+  caddydata:

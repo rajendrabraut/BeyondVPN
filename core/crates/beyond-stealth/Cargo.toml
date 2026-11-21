@@ -1,0 +1,14 @@
+[package]
+name = "beyond-stealth"
+description = "Beyond VPN stealth transport: WireGuard datagrams carried over TLS/443 to get through networks that block VPN protocols"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tokio-rustls.workspace = true
+webpki-roots.workspace = true
