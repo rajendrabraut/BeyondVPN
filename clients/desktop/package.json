@@ -1,7 +1,7 @@
 {
   "name": "beyond-vpn-desktop",
   "productName": "Beyond VPN",
-  "version": "0.2.0",
+  "version": "0.0.0+1",
   "description": "Beyond VPN desktop app (UI for the beyond-agent service)",
   "main": "src/main.js",
   "license": "AGPL-3.0-or-later",

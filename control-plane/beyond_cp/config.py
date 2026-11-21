@@ -71,6 +71,8 @@ class Settings:
     admin_email: str | None = field(default_factory=lambda: os.getenv("BEYOND_ADMIN_EMAIL"))
     admin_password: str | None = field(default_factory=lambda: os.getenv("BEYOND_ADMIN_PASSWORD"))
     trust_proxy_headers: bool = field(default_factory=lambda: _bool("BEYOND_TRUST_PROXY_HEADERS", False))
+    # Shared rate limits across control-plane replicas, e.g. redis://redis:6379/0 (unset = in-process).
+    redis_url: str = field(default_factory=lambda: os.getenv("BEYOND_REDIS_URL", ""))
     # SSO (OpenID Connect). JSON list of providers, inline or in a file; see docs/SSO.md.
     oidc_providers: list[dict] = field(default_factory=lambda: _oidc_providers())
     # Extra redirect targets allowed after SSO besides CORS origins / public URL

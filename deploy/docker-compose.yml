@@ -37,6 +37,8 @@ services:
       # SSO (docs/SSO.md). JSON list of OIDC providers; secrets via BEYOND_OIDC_SECRET_<ID>.
       BEYOND_OIDC_PROVIDERS: ${BEYOND_OIDC_PROVIDERS:-}
       BEYOND_OIDC_SECRET_CORP: ${BEYOND_OIDC_SECRET_CORP:-}
+      # Set when running more than one control-plane replica (shared rate limits), e.g. redis://redis:6379/0
+      BEYOND_REDIS_URL: ${BEYOND_REDIS_URL:-}
     volumes: [cpdata:/data]
 
   caddy:

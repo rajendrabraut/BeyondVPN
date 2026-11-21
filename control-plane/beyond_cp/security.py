@@ -175,7 +175,7 @@ def verify_totp(secret: str, code: str | None) -> bool:
 
 # ---------------------------------------------------------------- rate limiting
 class RateLimiter:
-    """In-process sliding-window limiter. Replace with Redis for multi-replica deployments."""
+    """In-process sliding-window limiter (single replica, or fallback when Redis is down)."""
 
     def __init__(self) -> None:
         self._hits: dict[str, deque] = defaultdict(deque)
@@ -197,4 +197,62 @@ class RateLimiter:
             self._hits.clear()
 
 
-limiter = RateLimiter()
+class RedisRateLimiter:
+    """Fixed-window limiter shared by every replica: INCR + EXPIRE in one pipeline round trip.
+
+    If Redis is unreachable the request is judged by the in-process limiter instead, so limits
+    degrade to per-replica rather than disappearing. Account lockout is stored in the database
+    and is unaffected either way.
+    """
+
+    def __init__(self, client, prefix: str = "beyond:rl:", clock=time.time) -> None:
+        self._r = client
+        self._prefix = prefix
+        self._clock = clock
+        self._fallback = RateLimiter()
+        self._warned = False
+
+    def allow(self, key: str, limit: int, window: float = 60.0) -> bool:
+        bucket = int(self._clock() // window)
+        k = f"{self._prefix}{key}:{bucket}"
+        try:
+            pipe = self._r.pipeline()
+            pipe.incr(k)
+            pipe.expire(k, int(window) + 1)
+            count, _ = pipe.execute()
+        except Exception as e:  # noqa: BLE001 - any Redis/network error
+            if not self._warned:
+                import logging
+
+                logging.getLogger("beyond_cp").warning("rate limiter: Redis unavailable (%s); using per-replica limits", type(e).__name__)
+                self._warned = True
+            return self._fallback.allow(key, limit, window)
+        self._warned = False
+        return int(count) <= limit
+
+    def reset(self) -> None:
+        self._fallback.reset()
+
+
+class Limiter:
+    """Facade imported by the routers; the backend is chosen at app start."""
+
+    def __init__(self) -> None:
+        self.backend: RateLimiter | RedisRateLimiter = RateLimiter()
+
+    def use_redis(self, url: str) -> None:
+        import redis  # optional dependency: pip install "beyond-cp[redis]"
+
+        self.backend = RedisRateLimiter(redis.Redis.from_url(url, socket_timeout=0.5, socket_connect_timeout=0.5))
+
+    def use_memory(self) -> None:
+        self.backend = RateLimiter()
+
+    def allow(self, key: str, limit: int, window: float = 60.0) -> bool:
+        return self.backend.allow(key, limit, window)
+
+    def reset(self) -> None:
+        self.backend.reset()
+
+
+limiter = Limiter()

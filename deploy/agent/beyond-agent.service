@@ -9,8 +9,8 @@ Wants=network-online.target
 [Service]
 Environment=BEYOND_AGENT_DIR=/var/lib/beyondvpn
 ExecStartPre=/bin/sh -c 'getent group beyondvpn >/dev/null || groupadd --system beyondvpn; install -d -m 0750 -g beyondvpn /var/lib/beyondvpn'
+# The agent writes agent.token itself as 0640 root:beyondvpn (no post-start chmod race).
 ExecStart=/usr/local/bin/beyond-agent serve --port 47800
-ExecStartPost=/bin/sh -c 'sleep 1; chgrp beyondvpn /var/lib/beyondvpn/agent.token; chmod 0640 /var/lib/beyondvpn/agent.token'
 Restart=on-failure
 NoNewPrivileges=yes
 ProtectHome=yes

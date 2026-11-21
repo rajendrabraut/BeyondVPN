@@ -22,3 +22,7 @@ dirs.workspace = true
 rand.workspace = true
 hex.workspace = true
 sha2.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# Native Service Control Manager integration (MIT/Apache-2.0, maintained by Mullvad).
+windows-service = "0.7"

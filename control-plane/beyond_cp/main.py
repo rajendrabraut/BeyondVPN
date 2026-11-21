@@ -13,10 +13,10 @@ from sqlalchemy import delete, select
 
 from . import __version__, audit
 from .config import get_settings
-from .db import Base, engine, init_engine, session
+from .db import init_engine, migrate, session
 from .models import DnsLog, ProxyLog, RefreshToken, SsoLogin, User, utcnow
 from .routers import admin, auth, gateway, me, sso, vpn
-from .security import hash_password, keys, password_ok
+from .security import hash_password, keys, limiter, password_ok
 
 log = logging.getLogger("beyond_cp")
 MAX_BODY = 16 * 1024 * 1024
@@ -63,7 +63,12 @@ def _retention_loop(stop: threading.Event) -> None:
 def create_app() -> FastAPI:
     s = get_settings()
     init_engine(s.database_url)
-    Base.metadata.create_all(engine())
+    log.info("schema: %s", migrate(s.database_url))
+    if s.redis_url:
+        limiter.use_redis(s.redis_url)
+        log.info("rate limits shared through Redis")
+    else:
+        limiter.use_memory()
     keys()  # create signing/data keys eagerly
     bootstrap_admin()
     stop = threading.Event()

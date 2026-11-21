@@ -7,13 +7,14 @@ Prioritised backlog. **P0** = required before any real users; **P1** = before pu
 | # | Item | Why | Effort |
 |---|---|---|---|
 | 1 | Run a real deployment by following `docs/DEPLOY_RUNBOOK.md`: control plane via `deploy/docker-compose.yml`, 2 gateways via `install-gateway.sh`, real tunnels from Windows, macOS, Linux, Android, iOS and the extension, plus multi-hop and stealth checks | Needs Linux servers (none available yet). Verified so far (2026-11-20): CI green on GitHub; WireGuard-NT tunnels on Windows hand-shake over loopback; Android APK runs on an API 36 emulator; Electron app signs in and connects against the local demo stack (`tests/e2e/demo_stack.py`, dry-run tunnel). Kernel WireGuard, nftables, multi-hop routing, stealth over the internet and Caddy are untested on real hosts | 1 d |
-| 2 | Windows service wrapper for `beyond-agent` (Windows SCM API via `windows-service` crate, or WinSW) | `sc.exe create` on a console binary will not report status to SCM correctly | 1 d |
-| 3 | Desktop installer bundling: WireGuard dependency check/installer, agent service, Electron app (`electron-builder`), code signing | Users currently install pieces manually | 3 d |
-| 4 | Linux agent token permissions: `beyond-agent serve` should create the token with group ownership itself instead of `ExecStartPost` chmod | Race at first start | 0.5 d |
-| 5 | Windows: protect agent state with DPAPI / ProgramData ACLs; restrict `agent.token` to the interactive users group | Any local user can read the token in the current install script | 1 d |
-| 6 | Alembic migrations for the control-plane schema | `create_all` cannot evolve existing tables | 1 d |
-| 7 | Redis-backed rate limiter and lockout counters | In-process limiter is per replica | 0.5 d |
+| ~~2~~ | **Done in 0.0.0.1**: native Windows service (`beyond-agent service install/uninstall`, SCM status, restart on failure) | verified on Windows 11: Running/auto-start/LocalSystem, restart actions, API 200 with token / 401 without | — |
+| 3 | Desktop installer bundling: WireGuard dependency check/installer, agent service, Electron app (`electron-builder`), **code signing certificate** | Users currently install pieces manually; unsigned binaries trigger SmartScreen | 3 d + certificate |
+| ~~4~~ | **Done in 0.0.0.1**: agent writes `agent.token` itself as 0640 root:beyondvpn (no `ExecStartPost` race); state dir 0750 with the group | — | — |
+| ~~5~~ | **Done in 0.0.0.1**: service state in `%ProgramData%\BeyondVPN` (SYSTEM + Administrators only; token also readable by INTERACTIVE); device key and refresh tokens DPAPI-encrypted | verified with icacls on Windows 11 | — |
+| ~~6~~ | **Done in 0.0.0.1**: Alembic migrations (`0001_initial`, forward-only), run at start and by `beyond-cp migrate`; older `create_all` databases are stamped, not re-created | tests: models == migrations, idempotent, legacy stamp keeps data | — |
+| ~~7~~ | **Done in 0.0.0.1**: `BEYOND_REDIS_URL` → rate limits shared through Redis (fixed window, atomic pipeline), per-replica fallback if Redis is down; lockout counters were already in the database | tests with a shared fake Redis | — |
 | 8 | External penetration test of control plane, gateway proxy and clients | Independent assurance | vendor |
+| 9b | Android release signing key (Play Store) — release APK in 0.0.0.1 is debug-signed | Needs a keystore kept outside the repo | 0.5 d |
 
 ## P1 — before public / enterprise launch
 

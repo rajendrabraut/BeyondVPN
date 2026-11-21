@@ -8,11 +8,15 @@ const path = require("node:path");
 
 const DEFAULT_PORT = 47800;
 
-function agentDir(env = process.env, platform = process.platform) {
+function agentDir(env = process.env, platform = process.platform, exists = fs.existsSync) {
   if (env.BEYOND_AGENT_DIR) return env.BEYOND_AGENT_DIR;
-  if (platform === "win32") return path.join(env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "BeyondVPN");
-  if (platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "BeyondVPN");
-  return path.join(env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "BeyondVPN");
+  const P = platform === "win32" ? path.win32 : path.posix;
+  // The machine-wide service (Windows service / systemd unit) wins when it is installed.
+  const service = platform === "win32" ? P.join(env.ProgramData || "C:\\ProgramData", "BeyondVPN") : platform === "linux" ? "/var/lib/beyondvpn" : null;
+  if (service && exists(P.join(service, "agent.token"))) return service;
+  if (platform === "win32") return P.join(env.APPDATA || P.join(os.homedir(), "AppData", "Roaming"), "BeyondVPN");
+  if (platform === "darwin") return P.join(os.homedir(), "Library", "Application Support", "BeyondVPN");
+  return P.join(env.XDG_CONFIG_HOME || P.join(os.homedir(), ".config"), "BeyondVPN");
 }
 
 function readToken(dir) {

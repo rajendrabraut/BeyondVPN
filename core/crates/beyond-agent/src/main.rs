@@ -11,6 +11,8 @@
 mod api;
 mod engine;
 mod server;
+#[cfg(windows)]
+mod service;
 mod store;
 mod tunnel;
 
@@ -71,6 +73,30 @@ enum Cmd {
         #[arg(long, default_value_t = 47800)]
         port: u16,
     },
+    /// Windows service management (run from an elevated prompt).
+    Service {
+        #[command(subcommand)]
+        cmd: ServiceCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum ServiceCmd {
+    /// Register and start the "Beyond VPN Agent" service (LocalSystem, auto start).
+    Install {
+        #[arg(long, default_value_t = 47800)]
+        port: u16,
+        /// Allow installing from outside Program Files (testing only).
+        #[arg(long)]
+        allow_any_path: bool,
+    },
+    /// Stop and remove the service (state is kept).
+    Uninstall,
+    /// Entry point used by the Service Control Manager.
+    Run {
+        #[arg(long, default_value_t = 47800)]
+        port: u16,
+    },
 }
 
 fn read_password() -> anyhow::Result<String> {
@@ -95,16 +121,45 @@ fn human(b: u64) -> String {
     format!("{v:.1} {}", units[i])
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+    // Service commands run before any async runtime: the SCM dispatcher must own the thread.
+    if let Cmd::Service { cmd } = cli.cmd {
+        return service_cmd(cmd);
+    }
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .with_writer(std::io::stderr)
         .init();
+    tokio::runtime::Runtime::new()?.block_on(run_cli(cli.cmd))
+}
+
+#[cfg(windows)]
+fn service_cmd(cmd: ServiceCmd) -> anyhow::Result<()> {
+    match cmd {
+        ServiceCmd::Install { port, allow_any_path } => {
+            service::install(port, allow_any_path)?;
+            println!("Service {} installed and started (state: {}).", service::NAME, store::service_dir().display());
+        }
+        ServiceCmd::Uninstall => {
+            service::uninstall()?;
+            println!("Service {} removed.", service::NAME);
+        }
+        ServiceCmd::Run { port } => service::run(port)?,
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn service_cmd(_cmd: ServiceCmd) -> anyhow::Result<()> {
+    anyhow::bail!("`service` is for Windows; on Linux/macOS use the systemd unit / launchd plist in deploy/agent")
+}
+
+async fn run_cli(cmd: Cmd) -> anyhow::Result<()> {
     let store = store::Store::open(store::Store::default_dir())?;
     let backend = tunnel::platform_backend(&store.dir);
     let engine = Arc::new(engine::Engine::new(store, backend));
-    match Cli::parse().cmd {
+    match cmd {
         Cmd::Login { api, email, totp } => {
             let pw = read_password()?;
             engine.login(&api, &email, &pw, totp.as_deref()).await?;
@@ -168,6 +223,7 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&engine.update_settings(s)?)?);
         }
         Cmd::Serve { port } => server::serve(engine, port).await?,
+        Cmd::Service { .. } => unreachable!("handled in main before the runtime starts"),
     }
     Ok(())
 }

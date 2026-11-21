@@ -29,7 +29,7 @@ Prerequisites: Linux VM with Docker, DNS `A` record `vpn.example.com` → VM, po
 
 | Platform | Steps |
 |---|---|
-| Windows | Install WireGuard for Windows → run `deploy/agent/install-windows.ps1` (admin) with `beyond-agent.exe` → install the Beyond VPN desktop app → sign in. |
+| Windows | Install WireGuard for Windows → run `deploy/agent/install-windows.ps1` (admin) with `beyond-agent.exe` (installs the native `BeyondVPNAgent` service; remove with `beyond-agent service uninstall`) → install the Beyond VPN desktop app → sign in. |
 | Linux | Install `wireguard-tools` + `nftables`; copy `beyond-agent` to `/usr/local/bin`; install `deploy/agent/beyond-agent.service`; add user to group `beyondvpn`; run the desktop app or use the CLI (`beyond-agent login …`, `connect`). |
 | macOS | `brew install wireguard-tools`; run `sudo beyond-agent serve` (launchd plist: P0 backlog) and the desktop app, or use the WireGuard app with a portal config. |
 | Android | Install the APK (or Play build) → sign in → Connect → optionally enable Always-on + Block connections without VPN. |
@@ -46,6 +46,8 @@ Prerequisites: Linux VM with Docker, DNS `A` record `vpn.example.com` → VM, po
 | Investigate activity | Admin → Logs (filters, CSV export); every access is audited |
 | Verify audit integrity | Admin → Audit → Verify, or `python -m beyond_cp.cli verify-audit` (cron + alert) |
 | Purge logs now | `python -m beyond_cp.cli purge-logs` |
+| Apply database migrations | Automatic at control-plane start; on demand `python -m beyond_cp.cli migrate`. Take a backup first; migrations are forward-only. |
+| Run several control-plane replicas | Add Redis and set `BEYOND_REDIS_URL` so rate limits are shared (lockouts are already in the database) |
 | Rotate a gateway key | Admin API `POST /api/v1/admin/servers/{id}/rotate-key`, update `/etc/beyondvpn/gateway.env`, restart service |
 | Maintenance mode | Admin → Gateways → Maintenance (clients stop selecting it) |
 

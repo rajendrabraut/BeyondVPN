@@ -4,7 +4,7 @@ RUN useradd --system --uid 10001 --home /app beyond
 WORKDIR /app
 COPY pyproject.toml ./
 COPY beyond_cp ./beyond_cp
-RUN pip install ".[postgres]" && mkdir -p /data && chown beyond /data
+RUN pip install ".[postgres,redis]" && mkdir -p /data && chown beyond /data
 USER beyond
 ENV BEYOND_DATA_DIR=/data
 EXPOSE 8000

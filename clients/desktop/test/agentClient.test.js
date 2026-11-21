@@ -17,7 +17,10 @@ function tmpDir(token) {
 
 test("agent dir per platform", () => {
   assert.equal(agentDir({ BEYOND_AGENT_DIR: "/x" }, "linux"), "/x");
-  assert.ok(agentDir({ APPDATA: "C:\\Users\\a\\AppData\\Roaming" }, "win32").endsWith("BeyondVPN"));
+  assert.ok(agentDir({ APPDATA: "C:\\Users\\a\\AppData\\Roaming" }, "win32", () => false).startsWith("C:\\Users\\a"));
+  // Installed service: its state dir is used when it holds a token.
+  assert.equal(agentDir({ ProgramData: "C:\\ProgramData", APPDATA: "C:\\U" }, "win32", (p) => p.includes("ProgramData")), "C:\\ProgramData\\BeyondVPN");
+  assert.equal(agentDir({}, "linux", (p) => p.startsWith("/var/lib/beyondvpn")), "/var/lib/beyondvpn");
   assert.ok(agentDir({}, "darwin").includes("Application Support"));
 });
 

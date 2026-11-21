@@ -1,0 +1,138 @@
+name: Release
+
+# Push a tag like v0.0.0.1 -> build every deliverable -> GitHub release with the files attached.
+# Tags starting with v0. (or containing "-") are published as pre-releases.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to rebuild and (re)attach assets to"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  rust:
+    name: rust (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, name: linux-x86_64, ext: "", gateway: true }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, name: windows-x86_64, ext: ".exe", gateway: false }
+          - { os: macos-latest, target: aarch64-apple-darwin, name: macos-arm64, ext: "", gateway: false }
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ env.TAG }}" }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "${{ matrix.target }}" }
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build agent${{ matrix.gateway && ' + gateway' || '' }}
+        working-directory: core
+        shell: bash
+        run: |
+          pkgs="-p beyond-agent"
+          if [ "${{ matrix.gateway }}" = "true" ]; then pkgs="$pkgs -p beyond-gateway"; fi
+          cargo build --release --locked --target ${{ matrix.target }} $pkgs
+      - name: Collect
+        shell: bash
+        run: |
+          mkdir -p dist
+          bin=core/target/${{ matrix.target }}/release
+          cp "$bin/beyond-agent${{ matrix.ext }}" "dist/beyond-agent-${{ matrix.name }}${{ matrix.ext }}"
+          if [ "${{ matrix.gateway }}" = "true" ]; then cp "$bin/beyond-gateway" "dist/beyond-gateway-${{ matrix.name }}"; fi
+      - uses: actions/upload-artifact@v4
+        with: { name: "rust-${{ matrix.name }}", path: dist/*, if-no-files-found: error }
+
+  android:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: clients/android } }
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ env.TAG }}" }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+      # Release signing needs a keystore secret that does not exist yet, so the APK is debug-signed.
+      - run: chmod +x gradlew && ./gradlew --no-daemon testDebugUnitTest assembleDebug
+      - run: |
+          mkdir -p ../../dist
+          cp app/build/outputs/apk/debug/app-debug.apk "../../dist/beyondvpn-android-${TAG#v}-debug.apk"
+      - uses: actions/upload-artifact@v4
+        with: { name: android, path: dist/*, if-no-files-found: error }
+
+  web-and-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ env.TAG }}" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Portal
+        working-directory: clients/web
+        run: npm ci && npm test && npm run build
+      - name: Extensions
+        working-directory: clients/extension
+        run: npm test && npm run check && npm run package:chrome && npm run package:firefox
+      - name: Collect
+        run: |
+          v="${TAG#v}"
+          mkdir -p dist
+          tar -C clients/web/dist -czf "dist/beyondvpn-portal-$v.tar.gz" .
+          (cd clients/extension/dist/chrome && zip -qr "../../../../dist/beyondvpn-extension-chrome-$v.zip" .)
+          (cd clients/extension/dist/firefox && zip -qr "../../../../dist/beyondvpn-extension-firefox-$v.zip" .)
+      - uses: actions/upload-artifact@v4
+        with: { name: web, path: dist/*, if-no-files-found: error }
+
+  control-plane:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ env.TAG }}" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - working-directory: control-plane
+        run: |
+          pip install ".[test]" build
+          pytest -q
+          python -m build --outdir ../dist
+      - uses: actions/upload-artifact@v4
+        with: { name: control-plane, path: dist/*, if-no-files-found: error }
+
+  publish:
+    needs: [rust, android, web-and-extension, control-plane]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ env.TAG }}" }
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="docs/releases/$TAG.md"
+          [ -f "$notes" ] || { echo "missing $notes"; exit 1; }
+          pre=""
+          case "$TAG" in v0.*|*-*) pre="--prerelease" ;; esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --verify-tag --title "Beyond VPN ${TAG#v}" --notes-file "$notes" $pre
+          fi

@@ -4,6 +4,7 @@
     python -m beyond_cp.cli create-server --id in-mum-1 --name "Mumbai 1" --country IN --hostname mum1.vpn.example.com
     python -m beyond_cp.cli purge-logs
     python -m beyond_cp.cli verify-audit
+    python -m beyond_cp.cli migrate
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ from sqlalchemy import select
 
 from . import audit
 from .config import get_settings
-from .db import Base, engine, init_engine, session
+from .db import init_engine, migrate, session
 from .models import Server, User, utcnow
 from .schemas import ServerCreate
 from .security import PASSWORD_RULE, hash_password, new_opaque_token, password_ok, sha256_hex
@@ -39,10 +40,15 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--features", default="")
     sub.add_parser("purge-logs")
     sub.add_parser("verify-audit")
+    sub.add_parser("migrate", help="apply database migrations (also done at server start)")
     args = p.parse_args(argv)
 
-    init_engine(get_settings().database_url)
-    Base.metadata.create_all(engine())
+    url = get_settings().database_url
+    init_engine(url)
+    result = migrate(url)
+    if args.cmd == "migrate":
+        print(f"schema {result}")
+        return 0
 
     if args.cmd == "create-admin":
         pw = os.getenv("BEYOND_ADMIN_PASSWORD") or getpass.getpass("Admin password: ")
