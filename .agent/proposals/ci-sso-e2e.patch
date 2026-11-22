@@ -1,0 +1,11 @@
+Proposal (owner applies): run the SSO end-to-end test in CI next to the existing e2e test.
+Repo rules forbid the agent from editing CI definitions, so this is a patch, not a commit.
+Apply with:  git apply .agent/proposals/ci-sso-e2e.patch
+
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -53,3 +53,4 @@
+         working-directory: core
+       - run: pip install ./control-plane[test] uvicorn
+       - run: python tests/e2e/run_e2e.py
++      - run: python tests/e2e/sso_e2e.py
