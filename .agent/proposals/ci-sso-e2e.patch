@@ -2,10 +2,15 @@ Proposal (owner applies): run the SSO end-to-end test in CI next to the existing
 Repo rules forbid the agent from editing CI definitions, so this is a patch, not a commit.
 Apply with:  git apply .agent/proposals/ci-sso-e2e.patch
 
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 6a5202f..57f01f6 100644
 --- a/.github/workflows/ci.yml
 +++ b/.github/workflows/ci.yml
-@@ -53,3 +53,4 @@
+@@ -53,6 +53,7 @@ jobs:
          working-directory: core
        - run: pip install ./control-plane[test] uvicorn
        - run: python tests/e2e/run_e2e.py
 +      - run: python tests/e2e/sso_e2e.py
+ 
+   web-and-extension:
+     runs-on: ubuntu-latest
