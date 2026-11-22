@@ -132,6 +132,16 @@ impl Api {
         self.call(reqwest::Method::POST, "/auth/login", None, Some(json!({"email": email, "password": password, "totp_code": totp}))).await
     }
 
+    /// Trade the one-time SSO code (from the `beyondvpn://sso#sso_code=` redirect) for tokens.
+    /// 428 `logging_consent_required` comes back as Http(428, ..) so the UI can ask the user.
+    pub async fn sso_exchange(&self, code: &str, accept_logging_policy: bool) -> Result<Tokens, ApiError> {
+        self.call(reqwest::Method::POST, "/auth/sso/exchange", None, Some(json!({"code": code, "accept_logging_policy": accept_logging_policy}))).await
+    }
+
+    pub async fn me(&self, token: &str) -> Result<serde_json::Value, ApiError> {
+        self.call(reqwest::Method::GET, "/me", Some(token), None).await
+    }
+
     pub async fn refresh(&self, refresh_token: &str) -> Result<Tokens, ApiError> {
         self.call(reqwest::Method::POST, "/auth/refresh", None, Some(json!({"refresh_token": refresh_token}))).await
     }

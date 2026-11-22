@@ -16,6 +16,16 @@
     <label for="pw">Password</label><input id="pw" type="password" />
     <label for="totp">Authenticator code (if enabled)</label><input id="totp" inputmode="numeric" />
     <button id="signin" class="primary">Sign in</button>
+    <div id="sso" hidden>
+      <p class="sub">Or use your organisation account</p>
+      <div id="sso-buttons"></div>
+    </div>
+    <div id="sso-consent" hidden>
+      <p class="sub">This service records your data usage and the domains you visit while connected, for security and compliance. Logs are kept for a limited time and you can view or delete yours.</p>
+      <button id="sso-agree" class="primary">I agree, finish sign-in</button>
+      <button id="sso-cancel">Cancel</button>
+    </div>
+    <p id="sso-wait" class="sub" hidden>Finish signing in in your browser…</p>
   </section>
 
   <section id="main" hidden>

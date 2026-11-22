@@ -42,9 +42,27 @@ impl Engine {
         let _g = self.lock.lock().await;
         let api = Api::new(url)?;
         let t = api.login(email, password, totp).await?;
+        self.finish_login(&api, url, Some(email.into()), t).await
+    }
+
+    /// Single sign-on: exchange the one-time code from the browser redirect.
+    pub async fn login_sso(&self, url: &str, code: &str, accept_logging_policy: bool) -> anyhow::Result<()> {
+        let _g = self.lock.lock().await;
+        anyhow::ensure!((10..=128).contains(&code.len()) && code.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'), "malformed SSO code");
+        let api = Api::new(url)?;
+        let t = api.sso_exchange(code, accept_logging_policy).await.map_err(|e| match e {
+            ApiError::Http(428, _) => anyhow::anyhow!("logging_consent_required"),
+            ApiError::Http(401, _) => anyhow::anyhow!("SSO code invalid or expired; sign in again"),
+            e => e.into(),
+        })?;
+        let email = api.me(&t.access_token).await.ok().and_then(|m| m["email"].as_str().map(String::from));
+        self.finish_login(&api, url, email, t).await
+    }
+
+    async fn finish_login(&self, api: &Api, url: &str, email: Option<String>, t: api::Tokens) -> anyhow::Result<()> {
         let mut st = self.store.load();
         st.api_url = Some(url.trim_end_matches('/').into());
-        st.email = Some(email.into());
+        st.email = email;
         st.access_token = Some(t.access_token);
         st.refresh_token = Some(t.refresh_token);
         // Register device (idempotent on public key server-side).

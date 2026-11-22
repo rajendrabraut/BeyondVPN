@@ -148,6 +148,13 @@ def test_open_redirect_rejected(sso_client):
     assert r.status_code == 302
 
 
+def test_app_redirect_gets_code_in_query(sso_client, idp):
+    loc = run_flow(sso_client, idp, return_to="beyondvpn://sso?n=abc123")
+    assert loc.startswith("beyondvpn://sso?n=abc123&sso_code=") and "#" not in loc
+    code = parse_qs(urlsplit(loc).query)["sso_code"][0]
+    assert sso_client.post("/api/v1/auth/sso/exchange", json={"code": code, "accept_logging_policy": True}).status_code == 200
+
+
 def test_domain_not_allowed(sso_client, idp):
     idp.claims = {"email": "mallory@other.example"}
     err = fragment(run_flow(sso_client, idp))

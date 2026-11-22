@@ -38,6 +38,17 @@ enum Cmd {
         #[arg(long)]
         totp: Option<String>,
     },
+    /// Finish single sign-on with the one-time code shown after signing in at
+    /// <API>/api/v1/auth/sso/<provider>/start?return_to=beyondvpn://sso
+    LoginSso {
+        #[arg(long, env = "BEYOND_API")]
+        api: String,
+        #[arg(long)]
+        code: String,
+        /// Agree to the activity-logging notice (needed on first SSO sign-in).
+        #[arg(long)]
+        accept_logging: bool,
+    },
     Logout,
     /// List VPN servers.
     Servers,
@@ -164,6 +175,16 @@ async fn run_cli(cmd: Cmd) -> anyhow::Result<()> {
             let pw = read_password()?;
             engine.login(&api, &email, &pw, totp.as_deref()).await?;
             println!("Logged in as {email}; device registered.");
+        }
+        Cmd::LoginSso { api, code, accept_logging } => {
+            engine.login_sso(&api, &code, accept_logging).await.map_err(|e| {
+                if e.to_string() == "logging_consent_required" {
+                    anyhow::anyhow!("this service records your data usage and visited domains; re-run with --accept-logging to agree")
+                } else {
+                    e
+                }
+            })?;
+            println!("Signed in with single sign-on; device registered.");
         }
         Cmd::Logout => {
             engine.logout().await?;

@@ -6,7 +6,8 @@ Flow (authorization code + PKCE, confidential client):
   3. IdP redirects to  GET /api/v1/auth/sso/{provider}/callback?code&state
   4. We exchange the code, verify the ID token (signature via JWKS, iss, aud, exp, nonce),
      find or create the user, and redirect to  <return_to>#sso_code=<one-time code>.
-     The code lives in the URL fragment so it never reaches a server log.
+     The code lives in the URL fragment so it never reaches a server log (app links such as
+     beyondvpn://sso?n=<nonce> get it as a query parameter instead, see _back()).
   5. Client calls  POST /api/v1/auth/sso/exchange {code}  and gets normal access/refresh tokens.
 
 SAML-only IdPs can be bridged through an OIDC broker (e.g. Keycloak) until native SAML lands.
@@ -115,8 +116,18 @@ def _rate(request: Request, bucket: str) -> None:
         raise HTTPException(429, "too many requests, slow down")
 
 
+def _back(return_to: str, params: dict) -> RedirectResponse:
+    """Web pages get the result in the URL fragment (never sent to a server). App links
+    (beyondvpn://...) get it in the query: browsers and OS handlers may drop fragments when
+    launching a custom scheme, and an app link reaches no server log anyway."""
+    if return_to.startswith(("http://", "https://")):
+        return RedirectResponse(f"{return_to}#{urlencode(params)}", status_code=302)
+    sep = "&" if "?" in return_to else "?"
+    return RedirectResponse(f"{return_to}{sep}{urlencode(params)}", status_code=302)
+
+
 def _fail(return_to: str, msg: str) -> RedirectResponse:
-    return RedirectResponse(f"{return_to}#{urlencode({'sso_error': msg})}", status_code=302)
+    return _back(return_to, {"sso_error": msg})
 
 
 @router.get("/providers")
@@ -245,7 +256,7 @@ def callback(pid: str, request: Request, state: str = "", code: str = "", error:
     row.user_id = user.id
     row.code_hash = sha256_hex(one_time)
     db.commit()
-    return RedirectResponse(f"{row.return_to}#{urlencode({'sso_code': one_time})}", status_code=302)
+    return _back(row.return_to, {"sso_code": one_time})
 
 
 class SsoExchangeIn(BaseModel):

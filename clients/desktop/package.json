@@ -7,8 +7,8 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/agentClient.test.js",
-    "check": "node --check src/main.js && node --check src/preload.js && node --check src/agentClient.js && node --check renderer/app.js",
+    "test": "node --test test/agentClient.test.js test/sso.test.js",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/agentClient.js && node --check src/sso.js && node --check renderer/app.js",
     "dist": "electron-builder"
   },
   "devDependencies": {

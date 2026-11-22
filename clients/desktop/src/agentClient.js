@@ -28,7 +28,7 @@ function readToken(dir) {
   }
 }
 
-const ALLOWED = new Set(["GET /v1/status", "GET /v1/servers", "POST /v1/login", "POST /v1/logout", "POST /v1/connect", "POST /v1/disconnect", "POST /v1/settings"]);
+const ALLOWED = new Set(["GET /v1/status", "GET /v1/servers", "POST /v1/login", "POST /v1/login/sso", "POST /v1/logout", "POST /v1/connect", "POST /v1/disconnect", "POST /v1/settings"]);
 
 class AgentClient {
   constructor({ port = DEFAULT_PORT, dir = agentDir(), fetchImpl = globalThis.fetch } = {}) {
@@ -60,6 +60,7 @@ class AgentClient {
   status() { return this.request("GET", "/v1/status"); }
   servers() { return this.request("GET", "/v1/servers"); }
   login(p) { return this.request("POST", "/v1/login", { api_url: String(p.apiUrl), email: String(p.email), password: String(p.password), totp_code: p.totp ? String(p.totp) : null }); }
+  loginSso(p) { return this.request("POST", "/v1/login/sso", { api_url: String(p.apiUrl), code: String(p.code), accept_logging_policy: !!p.acceptLogging }); }
   logout() { return this.request("POST", "/v1/logout"); }
   connect(serverId) { return this.request("POST", "/v1/connect", { server_id: serverId || null }); }
   disconnect() { return this.request("POST", "/v1/disconnect"); }

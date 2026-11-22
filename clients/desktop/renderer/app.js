@@ -16,6 +16,53 @@ function err(e) {
 
 let lastServersLoad = 0;
 
+// ---------------------------------------------------------------- single sign-on
+let ssoFor = "";
+async function loadSsoProviders() {
+  const api = $("api").value.trim();
+  if (!api || api === ssoFor) return;
+  ssoFor = api;
+  const box = $("sso-buttons");
+  box.replaceChildren();
+  let list = [];
+  try {
+    list = await beyond.ssoProviders(api);
+  } catch {
+    list = [];
+  }
+  for (const p of list) {
+    const b = document.createElement("button");
+    b.textContent = `Sign in with ${p.name}`; // textContent: provider names are untrusted
+    b.addEventListener("click", () =>
+      busy(b, async () => {
+        await beyond.ssoStart({ apiUrl: api, provider: p.id });
+        $("sso-wait").hidden = false;
+      }),
+    );
+    box.append(b);
+  }
+  $("sso").hidden = list.length === 0;
+}
+$("api").addEventListener("change", loadSsoProviders);
+$("api").addEventListener("blur", loadSsoProviders);
+
+beyond.onSso((p) => {
+  $("sso-wait").hidden = true;
+  $("sso-consent").hidden = p.state !== "consent";
+  if (p.state === "error") err(p.message);
+  if (p.state === "done") {
+    lastServersLoad = 0;
+    refresh();
+  }
+});
+$("sso-agree").addEventListener("click", (e) => busy(e.target, () => beyond.ssoConsent(true)));
+$("sso-cancel").addEventListener("click", (e) =>
+  busy(e.target, async () => {
+    await beyond.ssoConsent(false);
+    $("sso-consent").hidden = true;
+  }),
+);
+
 async function refresh() {
   let s;
   try {

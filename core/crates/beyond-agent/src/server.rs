@@ -85,6 +85,24 @@ async fn login(State(s): State<AppState>, Json(r): Json<LoginReq>) -> Response {
     }
 }
 
+#[derive(Deserialize)]
+struct SsoLoginReq {
+    api_url: String,
+    code: String,
+    #[serde(default)]
+    accept_logging_policy: bool,
+}
+
+/// Finish single sign-on: the desktop app hands over the one-time code from the browser redirect.
+/// A 428 with `logging_consent_required` means: ask the user, then retry with the flag set.
+async fn login_sso(State(s): State<AppState>, Json(r): Json<SsoLoginReq>) -> Response {
+    match s.engine.login_sso(&r.api_url, &r.code, r.accept_logging_policy).await {
+        Ok(()) => Json(json!({"ok": true})).into_response(),
+        Err(e) if e.to_string() == "logging_consent_required" => (StatusCode::PRECONDITION_REQUIRED, Json(json!({"error": "logging_consent_required"}))).into_response(),
+        Err(e) => err(e),
+    }
+}
+
 #[derive(Deserialize, Default)]
 struct ConnectReq {
     #[serde(default)]
@@ -125,6 +143,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/status", get(status))
         .route("/v1/servers", get(servers))
         .route("/v1/login", post(login))
+        .route("/v1/login/sso", post(login_sso))
         .route("/v1/logout", post(logout))
         .route("/v1/connect", post(connect))
         .route("/v1/disconnect", post(disconnect))
