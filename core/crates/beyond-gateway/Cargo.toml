@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "beyond-gateway"
 description = "Beyond VPN gateway: WireGuard peer sync, usage metering, filtering DNS, authenticated HTTPS proxy"
 version.workspace = true
@@ -20,8 +20,9 @@ tracing-subscriber.workspace = true
 toml.workspace = true
 reqwest.workspace = true
 tokio-rustls.workspace = true
-rustls-pemfile.workspace = true
 ed25519-dalek.workspace = true
 
 [dev-dependencies]
 rand.workspace = true
+# Throwaway certificates generated at test time (no key material in the repo).
+rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"] }

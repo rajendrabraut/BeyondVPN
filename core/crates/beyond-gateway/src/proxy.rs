@@ -238,12 +238,17 @@ fn tls_acceptor(cfg: &ProxyConfig) -> anyhow::Result<Option<tokio_rustls::TlsAcc
 /// TLS acceptor from PEM files; `None` when either path is missing.
 pub fn tls_from_files(cert: Option<&std::path::Path>, key: Option<&std::path::Path>) -> anyhow::Result<Option<tokio_rustls::TlsAcceptor>> {
     use tokio_rustls::rustls;
+    use tokio_rustls::rustls::pki_types::pem::PemObject;
+    use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
     let (Some(cert), Some(key)) = (cert, key) else {
         return Ok(None);
     };
-    let certs = rustls_pemfile::certs(&mut std::io::BufReader::new(std::fs::File::open(cert)?)).collect::<Result<Vec<_>, _>>()?;
-    let key = rustls_pemfile::private_key(&mut std::io::BufReader::new(std::fs::File::open(key)?))?
-        .ok_or_else(|| anyhow::anyhow!("no private key in {}", key.display()))?;
+    // PEM parsing from rustls-pki-types (rustls-pemfile is unmaintained, RUSTSEC-2025-0134).
+    let certs = CertificateDer::pem_file_iter(cert)
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| anyhow::anyhow!("certificate {}: {e}", cert.display()))?;
+    anyhow::ensure!(!certs.is_empty(), "no certificate in {}", cert.display());
+    let key = PrivateKeyDer::from_pem_file(key).map_err(|e| anyhow::anyhow!("private key {}: {e}", key.display()))?;
     let sc = rustls::ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
         .with_protocol_versions(&[&rustls::version::TLS13, &rustls::version::TLS12])?
         .with_no_client_auth()
@@ -431,5 +436,48 @@ mod tests {
         let auth = STANDARD.encode(format!("x:{}", token::sign(&claims, &sk)));
         let r = roundtrip(proxy, format!("CONNECT 127.0.0.1:443 HTTP/1.1\r\nProxy-Authorization: Basic {auth}\r\n\r\n")).await;
         assert!(r.starts_with("HTTP/1.1 403") && r.contains("destination"), "{r}");
+    }
+
+    /// PEM cert/key files load, and a real TLS handshake works with the resulting acceptor.
+    #[tokio::test]
+    async fn tls_files_load_and_handshake() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio_rustls::rustls;
+        let dir = std::env::temp_dir().join(format!("beyond-tls-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ck = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+        let (cert_p, key_p) = (dir.join("cert.pem"), dir.join("key.pem"));
+        std::fs::write(&cert_p, ck.cert.pem()).unwrap();
+        std::fs::write(&key_p, ck.key_pair.serialize_pem()).unwrap();
+
+        assert!(tls_from_files(None, Some(&key_p)).unwrap().is_none());
+        let acceptor = tls_from_files(Some(&cert_p), Some(&key_p)).unwrap().expect("acceptor");
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (s, _) = listener.accept().await.unwrap();
+            let mut tls = acceptor.accept(s).await.unwrap();
+            tls.write_all(b"hello-tls").await.unwrap();
+            tls.shutdown().await.unwrap();
+        });
+        let mut roots = rustls::RootCertStore::empty();
+        roots.add(ck.cert.der().clone()).unwrap();
+        let cfg = rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+        let tcp = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let name = rustls::pki_types::ServerName::try_from("localhost").unwrap();
+        let mut tls = tokio_rustls::TlsConnector::from(Arc::new(cfg)).connect(name, tcp).await.unwrap();
+        let mut got = Vec::new();
+        tls.read_to_end(&mut got).await.unwrap();
+        assert_eq!(got, b"hello-tls");
+
+        // Garbage files are reported, not ignored.
+        std::fs::write(&key_p, "not a key").unwrap();
+        assert!(tls_from_files(Some(&cert_p), Some(&key_p)).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
